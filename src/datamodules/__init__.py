@@ -1,26 +1,15 @@
 from .unimodal_datamodules import (
     BaseDataModule,
-    IMDBDataModule,
     MaskedLMDataModule,
     CIFARDataModule,
     ImageNetDataModule,
-    LibriSpeechDataModule,
-    SpeechCommandsDataModule,
-    QQPDataModule,
-    MRPCDataModule,
     UNIMODAL_DATAMODULE_REGISTRY
 )
 
 from .multimodal_datamodules import (
     COCOCaptionsDataModule,
-    VisualGenomeDataModule,
     ConceptualCaptionsDataModule,
-    VQAv2DataModule,
-    NLVR2DataModule,
     Flickr30DataModule,
-    Flickr8AudioDataModule,
-    CommonVoiceDataModule,
-    SBUCaptionsDataModule,
     MULTIMODAL_DATAMODULE_REGISTRY
 )
 

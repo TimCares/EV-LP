@@ -1,7 +1,7 @@
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from typing import Tuple, Dict, Any, List
-from datasets_ import IMDBDataset, ImageNetDataset, LibriSpeechDataset, SpeechCommandsDataset, MaskedLMDataset, QQPDataset, MRPCDataset
+from datasets_ import ImageNetDataset, MaskedLMDataset
 from datasets_ import DATASET_REGISTRY
 from functools import partial
 from data2vec_fairseq.data.modality import Modality
@@ -92,105 +92,6 @@ class BaseDataModule(LightningDataModule):
         if stage == 'test' or stage is None:
             if hasattr(self, 'test_dataset'):
                 del self.test_dataset
-
-
-class IMDBDataModule(BaseDataModule):
-    def __init__(self, 
-                 data_path:str,
-                 num_max_bpe_tokens:int,
-                 *args,
-                 **kwargs):
-        super().__init__(data_path, *args, **kwargs)
-        self.num_max_bpe_tokens = num_max_bpe_tokens
-
-    def prepare_data(self): # only for validation datasets
-        if not hasattr(self, 'train_dataset'):
-            self.set_train_dataset()
-        if not hasattr(self, 'test_dataset'):
-            self.set_test_dataset()
-
-    def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
-            self.train_dataset.load()
-        if stage == 'test' or stage is None:
-            self.test_dataset.load()
-
-    def set_train_dataset(self):
-        self.train_dataset = IMDBDataset(data_path=self.data_path, split='train', num_max_bpe_tokens=self.num_max_bpe_tokens)
-
-    def set_test_dataset(self):
-        self.test_dataset = IMDBDataset(data_path=self.data_path, split='test', num_max_bpe_tokens=self.num_max_bpe_tokens)
-
-class QQPDataModule(BaseDataModule):
-    def __init__(self, 
-                 data_path:str,
-                 num_max_bpe_tokens:int,
-                 *args,
-                 **kwargs):
-        super().__init__(data_path, *args, **kwargs)
-        self.num_max_bpe_tokens = num_max_bpe_tokens
-
-    @property
-    def modality(self) -> Modality:
-        return Modality.TEXT
-
-    def prepare_data(self):
-        if not hasattr(self, 'train_dataset'):
-            self.set_train_dataset()
-        if not hasattr(self, 'test_dataset'):
-            self.set_test_dataset()
-
-    def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
-            self.train_dataset.load()
-        if stage == 'test' or stage is None:
-            self.test_dataset.load()
-
-    def set_train_dataset(self):
-        self.train_dataset = QQPDataset(data_path=self.data_path, 
-                                        split='train',
-                                        num_max_bpe_tokens=self.num_max_bpe_tokens)
-
-    def set_test_dataset(self):
-        self.test_dataset = QQPDataset(data_path=self.data_path, 
-                                       split='dev',
-                                       num_max_bpe_tokens=self.num_max_bpe_tokens)
-
-
-class MRPCDataModule(BaseDataModule):
-    def __init__(self, 
-                 data_path:str,
-                 num_max_bpe_tokens:int,
-                 *args,
-                 **kwargs):
-        super().__init__(data_path, *args, **kwargs)
-        self.num_max_bpe_tokens = num_max_bpe_tokens
-
-    @property
-    def modality(self) -> Modality:
-        return Modality.TEXT
-
-    def prepare_data(self):
-        if not hasattr(self, 'train_dataset'):
-            self.set_train_dataset()
-        if not hasattr(self, 'test_dataset'):
-            self.set_test_dataset()
-
-    def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
-            self.train_dataset.load()
-        if stage == 'test' or stage is None:
-            self.test_dataset.load()
-
-    def set_train_dataset(self):
-        self.train_dataset = MRPCDataset(data_path=self.data_path,
-                                         split='train',
-                                         num_max_bpe_tokens=self.num_max_bpe_tokens)
-        
-    def set_test_dataset(self):
-        self.test_dataset = MRPCDataset(data_path=self.data_path,
-                                        split='test',
-                                        num_max_bpe_tokens=self.num_max_bpe_tokens)
 
 
 class MaskedLMDataModule(BaseDataModule):
@@ -328,113 +229,11 @@ class ImageNetDataModule(BaseDataModule):
                                            split='val',
                                            pretraining=self.pretraining,
                                            )
-        
-
-class LibriSpeechDataModule(BaseDataModule):
-    def __init__(self,
-                 data_path:str,
-                 sample_rate:int,
-                 max_sample_size:int,
-                 min_sample_size:int,
-                 normalize:bool,
-                 pad:bool,
-                 types_train:Tuple[str],
-                 types_test:Tuple[str]=None,
-                 return_path:bool=False,
-                 *args,
-                 **kwargs):
-        super().__init__(data_path, *args, **kwargs)
-        self.sample_rate = sample_rate
-        self.max_sample_size = max_sample_size
-        self.min_sample_size = min_sample_size
-        self.normalize = normalize
-        self.pad = pad
-        self.types_train = types_train
-        self.types_test = types_test
-        self.return_path = return_path
-
-    def prepare_data(self):
-        if not hasattr(self, 'train_dataset'):
-            self.set_train_dataset()
-        if self.types_test is not None and not hasattr(self, 'test_dataset'):
-            self.set_test_dataset()
-
-    def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
-            self.train_dataset.load()
-        if stage == 'test' or stage is None:
-            self.test_dataset.load()
-
-    def set_train_dataset(self):
-        self.train_dataset = LibriSpeechDataset(data_path=self.data_path,
-                                                split='train',
-                                                sample_rate=self.sample_rate,
-                                                max_sample_size=self.max_sample_size,
-                                                min_sample_size=self.min_sample_size,
-                                                normalize=self.normalize,
-                                                pad=self.pad,
-                                                types=self.types_train,
-                                                return_path=self.return_path)
-
-    def set_test_dataset(self):
-        self.test_dataset = LibriSpeechDataset(data_path=self.data_path,
-                                               split='test',
-                                               sample_rate=self.sample_rate,
-                                               max_sample_size=self.max_sample_size,
-                                               min_sample_size=0,
-                                               normalize=self.normalize,
-                                               pad=self.pad,
-                                               types=self.types_test,
-                                               return_path=self.return_path)
-        
-
-class SpeechCommandsDataModule(BaseDataModule):
-    def __init__(self,
-                 data_path:str,
-                 min_sample_size: int,
-                 normalize: bool,
-                 pad: bool,
-                 *args,
-                 **kwargs
-                 ):
-        super().__init__(data_path, *args, **kwargs)
-        self.min_sample_size = min_sample_size
-        self.normalize = normalize
-        self.pad = pad
-
-    def prepare_data(self): # only for validation datasets
-        if not hasattr(self, 'train_dataset'):
-            self.set_train_dataset()
-        if not hasattr(self, 'test_dataset'):
-            self.set_test_dataset()
-
-    def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
-            self.train_dataset.load()
-        if stage == 'test' or stage is None:
-            self.test_dataset.load()
-
-    def set_train_dataset(self):
-        self.train_dataset = SpeechCommandsDataset(data_path=self.data_path,
-                                                   split='train',
-                                                   normalize=self.normalize,
-                                                   pad=self.pad,)
-
-    def set_test_dataset(self):
-        self.test_dataset = SpeechCommandsDataset(data_path=self.data_path,
-                                                  split='test',
-                                                  normalize=self.normalize,
-                                                  pad=self.pad,)
 
 
 UNIMODAL_DATAMODULE_REGISTRY = {
-    'imdb': IMDBDataModule,
     'masked_lm': MaskedLMDataModule,
     'cifar10': partial(CIFARDataModule, type='cifar10'),
     'cifar100': partial(CIFARDataModule, type='cifar100'),
     'imagenet': ImageNetDataModule,
-    'librispeech': LibriSpeechDataModule,
-    'speechcommands': SpeechCommandsDataModule,
-    'qqp': QQPDataModule,
-    'mrpc': MRPCDataModule,
 }
