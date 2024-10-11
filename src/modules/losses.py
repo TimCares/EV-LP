@@ -8,7 +8,7 @@ from timm.models.layers import trunc_normal_
 from .layers import gather_features, GatherLayer
 from .cmli import infer_cmli_logits, masked_mean, max_neg_value, to_half, remove_cls
 from typing import Dict
-from fairseq.modules.transformer_sentence_encoder import init_bert_params
+from utils import init_weights
 import logging
 
 logger = logging.getLogger(__name__)
@@ -459,7 +459,7 @@ class TargetCMLILoss(L.LightningModule):
         self.embed_dim = embed_dim
         self.cmli_dim = cmli_dim if cmli_dim is not None else embed_dim
         self.down_proj = nn.Linear(embed_dim, self.cmli_dim)
-        self.down_proj.apply(init_bert_params)
+        self.down_proj.apply(init_weights)
     
     def forward(self, image, text, target, padding_mask):
 

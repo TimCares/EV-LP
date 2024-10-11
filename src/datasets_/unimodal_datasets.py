@@ -1,24 +1,11 @@
 import os
 import logging
-import torch
-from torch.utils.data import Dataset
-from torchvision.datasets.folder import default_loader
 import json
 from typing import *
 from functools import partial
-import shutil
-from .data_utils import get_transforms, write_data_into_jsonl
-from .base_datasets import BaseDataset
-from fairseq.data.audio.raw_audio_dataset import FileAudioDataset
-from utils import pad_text_sequence
-from torchvision.datasets.utils import download_url
-import pandas as pd
-import zipfile
-from fairseq.data import Dictionary, ConcatDataset
-from torchaudio.datasets import LIBRISPEECH, SPEECHCOMMANDS
-import torchtext
+from .data_utils import write_data_into_jsonl
 from torchvision.datasets import CIFAR10, CIFAR100
-from .base_datasets import AudioDataset, ImageDataset
+from .base_datasets import ImageDataset
 from data2vec_fairseq.data.modality import Modality
 from .imagenet_classes import IMAGENET2012_CLASSES
 

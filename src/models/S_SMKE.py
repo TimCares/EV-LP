@@ -13,7 +13,7 @@ from timm.models.vision_transformer import LayerScale
 from dataclasses import dataclass, field
 from data2vec_fairseq.data.modality import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
-from fairseq.modules.transformer_sentence_encoder import init_bert_params
+from utils import init_weights
 from transformers import BertModel
 from . import MODEL_REGISTRY
 from modules import Block, ClipLoss, KDClipLoss, KDClipMomentumMemoryBankLoss
@@ -269,7 +269,7 @@ class S_SMKE(nn.Module):
         self.fc_norm = make_layer_norm(self.cfg.embed_dim)
         self.head = nn.Linear(self.cfg.embed_dim, self.cfg.embed_dim)
 
-        self.apply(init_bert_params)
+        self.apply(init_weights)
 
         self.logit_scales = nn.Parameter(torch.ones([2]) * np.log(1 / 0.07))
 

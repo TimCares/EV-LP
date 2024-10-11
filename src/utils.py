@@ -14,31 +14,20 @@ import torch.nn.functional as F
 from data2vec_fairseq.models.data2vec2 import Data2VecMultiModel
 from data2vec_fairseq.models.data2vec2 import Data2VecMultiConfig
 from data2vec_fairseq.data.modality import Modality
-from fairseq.data import Dictionary
-from fairseq.dataclass.utils import merge_with_parent
 from beit2.modeling_pretrain import VisionTransformerForMaskedImageModeling
+from timm.models.layers import trunc_normal_ as __call_trunc_normal_
 
 logger = logging.getLogger(__name__)
 
 def load_model(pretrained_model_cfg:DictConfig,
                model_state_dict:OrderedDict[str, torch.Tensor]) -> Data2VecMultiModel:
     
-    pretrained_model_cfg = merge_with_parent(Data2VecMultiConfig(), pretrained_model_cfg, remove_missing=True)
+    pretrained_model_cfg = OmegaConf.merge(Data2VecMultiConfig(), pretrained_model_cfg)
 
-    logger.info(f"Modality used: {pretrained_model_cfg.supported_modality}")
-    if pretrained_model_cfg.supported_modality.name.lower() == 'text':
-        Task = namedtuple('Task', 'source_dictionary')
-
-        dictionary = Dictionary.load(os.path.join('..', 'data', "dict.txt"))
-        dictionary.add_symbol("<mask>")
-        dummy_task = Task(source_dictionary=dictionary)
-    else:
-        dummy_task = False
-
-    model = Data2VecMultiModel.build_model(pretrained_model_cfg, task=dummy_task)
+    model = Data2VecMultiModel.build_model(pretrained_model_cfg)
 
     result = model.load_state_dict(model_state_dict)
-    logger.info(f'Loaded state dict, result: {result}')
+    logger.info(f'Loaded Data2Vec2 state dict, result: {result}')
     return model
 
 
@@ -114,3 +103,16 @@ def load_beit2_teacher(sd_path:str, **kwargs) -> VisionTransformerForMaskedImage
     logger.info(f"Loaded BEiT2 teacher state dict with result: {result}")
     del beit2.lm_head
     return beit2
+
+# from BEiT-3 repo: https://github.com/microsoft/unilm/blob/master/beit3/modeling_utils.py
+def trunc_normal_(tensor, mean=0., std=1.):
+    __call_trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
+
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        trunc_normal_(m.weight, std=.02)
+        if isinstance(m, nn.Linear) and m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+    elif isinstance(m, nn.LayerNorm):
+        nn.init.constant_(m.bias, 0)
+        nn.init.constant_(m.weight, 1.0)
