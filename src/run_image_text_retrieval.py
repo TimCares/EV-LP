@@ -8,7 +8,6 @@ import sys
 sys.path.append('beit2')
 from models import MODEL_REGISTRY
 from datamodules import DATAMODULE_REGISTRY
-from utils import load_pretrained_d2v_model
 from omegaconf import DictConfig, open_dict
 import hydra
 import json
@@ -134,51 +133,7 @@ def zero_shot_retrieval(model, dataloader, device, compute_amr=False):
     return compute_scores(img_embeds=img_embeds, text_embeds=text_embeds, img_ids=img_ids, compute_amr=compute_amr)
 
 
-@torch.no_grad()
-def d2v_zero_shot_retrieval(dataloader, device):
-    d2v_image = load_pretrained_d2v_model('/workspace/models/base_imagenet.pt')
-    d2v_image = d2v_image.to(device)
-    d2v_image.eval()
-    d2v_text = load_pretrained_d2v_model('/workspace/models/nlp_base.pt')
-    d2v_text = d2v_text.to(device)
-    d2v_text.eval()
-
-    img_embeds = []
-    text_embeds = []
-    img_ids = []
-
-    for batch in track(dataloader):
-        image = batch['image'].to(device)
-        text = batch['text'].to(device)
-        padding_mask = batch['padding_mask'].to(device) if 'padding_mask' in batch else None
-        
-        img_emb = d2v_image.extract_features(
-            source=image,
-            mode=None, # determined automatically in model
-            padding_mask=None,
-            mask=False,
-            remove_extra_tokens=False,
-        )['x'][:, 0]
-
-        text_emb = d2v_text.extract_features(
-            source=text,
-            mode=None, # determined automatically in model
-            padding_mask=padding_mask,
-            mask=False,
-            remove_extra_tokens=False,
-        )['x'][:, 0]
-
-        img_emb = img_emb / img_emb.norm(dim=-1, keepdim=True)
-        text_emb = text_emb / text_emb.norm(dim=-1, keepdim=True)
-        
-        img_embeds.append(img_emb)
-        text_embeds.append(text_emb)
-        img_ids.append(batch['id'].to(device))
-
-    compute_scores(img_embeds=img_embeds, text_embeds=text_embeds, img_ids=img_ids)
-
-
-@hydra.main(version_base=None, config_path=os.path.join("..", "configs", "retrieval"), config_name='coco_flickr')
+@hydra.main(version_base=None, config_path=os.path.join("..", "configs"), config_name='coco_flickr_retrieval')
 def main(cfg: DictConfig) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
@@ -194,26 +149,18 @@ def main(cfg: DictConfig) -> None:
         dm = DATAMODULE_REGISTRY[datamodule_key](**dataset_args)
         datamodules.append((datamodule_key, dm))
     
-    if cfg.eval_d2v:
-        logger.info("Evaluating Data2Vec model")
-        for name, dm in datamodules:
-            dm.prepare_data()
-            dm.setup('test')
-            d2v_zero_shot_retrieval(dm.test_dataloader(), device)
-    else:
-        logger.info("Evaluating KD model")
-        path = os.path.join(cfg.pretrained_path, cfg.model_version)
-        model_cls:LightningModule = MODEL_REGISTRY[cfg.model_name]['module']
-        model = model_cls.load_from_checkpoint(path).model
-        model = model.to(device)
-        model.requires_grad_(False)
-        model.eval()
+    path = os.path.join(cfg.pretrained_path, cfg.model_version)
+    model_cls:LightningModule = MODEL_REGISTRY[cfg.model_name]['module']
+    model = model_cls.load_from_checkpoint(path).model
+    model = model.to(device)
+    model.requires_grad_(False)
+    model.eval()
 
-        for name, dm in datamodules:
-            dm.prepare_data()
-            dm.setup('test')
-            logger.info(f"Zero-shot retrieval on: {name}")
-            zero_shot_retrieval(model, dm.test_dataloader(), device, compute_amr=name=='coco_captions')
+    for name, dm in datamodules:
+        dm.prepare_data()
+        dm.setup('test')
+        logger.info(f"Zero-shot retrieval on: {name}")
+        zero_shot_retrieval(model, dm.test_dataloader(), device, compute_amr=name=='coco_captions')
 
 if __name__ == "__main__":
     main()

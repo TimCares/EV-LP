@@ -34,6 +34,8 @@ teacher:
   vocab_size: 8192
   init_values: 0.1
 
+imagenet_zero_shot_callback: True
+
 model:
   beitv2:
     model_path: ${model_path}

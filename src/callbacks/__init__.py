@@ -1,4 +1,3 @@
-from .zero_shot import ZeroShotRetrievalCallback, MultimodalZeroShotRetrievalCallback
+from .imagenet_zero_shot import ImageNetZeroShotCallback
 from .utils import WallClockCallback, GracefulStoppingCallback, ResumeCheckModelCheckpoint
-from .vq import CodebookUsageCallback
 from .retrieval import RetrievalCallback

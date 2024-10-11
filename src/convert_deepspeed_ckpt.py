@@ -1,5 +1,4 @@
 import os
-import shutil
 from lightning.pytorch.utilities.deepspeed import convert_zero_checkpoint_to_fp32_state_dict
 import argparse
 
