@@ -2,7 +2,7 @@
 
 hydra:
   run:
-    dir: .
+    dir: ${log_dir}
 
 base_dir: ../data
 model_path: ${base_dir}/models

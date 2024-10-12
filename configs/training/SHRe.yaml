@@ -2,16 +2,9 @@
 
 hydra:
   run:
-    dir: .
+    dir: ${log_dir}
 
-defaults:
-  - _self_ # this first, so that the base config can be overridden by others
-  
-  - override hydra/job_logging: colorlog
-  - override hydra/hydra_logging: colorlog
-
-dry_run: False
-base_dir: "/workspace"
+base_dir: /workspace
 model_path: ${base_dir}/models
 data_path: ${base_dir}
 log_dir: ${base_dir}/logs
