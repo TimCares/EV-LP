@@ -5,7 +5,7 @@ import json
 from typing import *
 import numpy as np
 from collections import namedtuple
-from .data_utils import get_transforms
+from .data_utils import get_transforms, collater as default_collater
 import random
 from utils import Modality
 from utils import pad_text_sequence
@@ -80,17 +80,7 @@ class BaseDataset(torch.utils.data.Dataset):
         return mask_labels
 
     def collater(self, samples):
-        batch_tensors = {}
-        for tensor_key in samples[0]:
-            if isinstance(samples[0][tensor_key], torch.Tensor):
-                batch_tensors[tensor_key] = torch.stack([d[tensor_key] for d in samples])
-            elif isinstance(samples[0][tensor_key], np.ndarray):
-                batch_tensors[tensor_key] = torch.from_numpy(np.stack([d[tensor_key] for d in samples]))
-            else:
-                batch_tensors[tensor_key] = torch.tensor([d[tensor_key] for d in samples], dtype=torch.long)
-
-        batch_tensors['modality'] = self.modality
-        return batch_tensors
+        return default_collater(samples)
     
     def log(self, msg:str):
         logger.info(f"[{self.__class__.__name__}]: {msg}")

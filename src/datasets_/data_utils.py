@@ -4,9 +4,10 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 import torch
 import logging
 import json
-from typing import Tuple
+from typing import Tuple, List, Dict, Union, Iterable
 import PIL
 from timm.data.transforms import RandomResizedCropAndInterpolation
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -142,3 +143,27 @@ def get_transforms_finetuning(
         transforms.Normalize(mean, std)
     ]
     return transforms.Compose(t)
+
+def collater(samples:List[Dict[str, Union[torch.Tensor, np.ndarray, Iterable]]]) -> Dict[str, torch.Tensor]:
+    """Batches a set of items, where each item is a dictionary of tensors, numpy arrays, or iterable objects.
+    The result is a dictionary of tensors, with the same keys as the input items.
+    All items are expected to have the exact same(!) keys, and the values associated
+    with each key are stacked in a new tensor.
+
+    Args:
+        samples (List[Dict[str, Union[torch.Tensor, np.ndarray, Iterable]]]): A list of items to batch.
+            Each item must be a dictionary.
+
+    Returns:
+        Dict[str, torch.Tensor]: The batched items.
+    """    
+    batch_tensors = {}
+    for tensor_key in samples[0]: # iterate over all keys
+        if isinstance(samples[0][tensor_key], torch.Tensor):
+            batch_tensors[tensor_key] = torch.stack([d[tensor_key] for d in samples])
+        elif isinstance(samples[0][tensor_key], np.ndarray):
+            batch_tensors[tensor_key] = torch.from_numpy(np.stack([d[tensor_key] for d in samples]))
+        else:
+            batch_tensors[tensor_key] = torch.tensor([d[tensor_key] for d in samples], dtype=torch.long)
+
+    return batch_tensors
