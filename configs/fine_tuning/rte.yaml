@@ -30,14 +30,16 @@ model:
   dropout: 0.1
 
 data:
-  _name: rte_glue
-  num_max_bpe_tokens: 256
+  dataloader:
+    batch_size: 16
+    num_workers: 5
+    shuffle: True
+    drop_last: True
 
-  data_path: ${data_path}
-  batch_size: 16
-  num_workers: 5
-  shuffle: True
-  drop_last: True
+  datamodules:
+    rte_glue:
+      data_path: ${data_path}
+      num_max_bpe_tokens: 256
 
 optimizer:
   lr: 2e-5

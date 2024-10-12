@@ -30,18 +30,20 @@ load_checkpoint:
 nlp_context_length: 64 # inspired by BEiT3
 
 data:
-  _name: flickr30
-  data_path: ${data_path}
-  num_max_bpe_tokens: ${nlp_context_length}
-  color_jitter: # None
-  beit_transforms: False
-  crop_scale: [0.5, 1.0]
-  text_token_mask_prob: 0.0
-  
-  batch_size: 1024
-  num_workers: 8
-  shuffle: True
-  drop_last: True
+  dataloader:
+    batch_size: 1024
+    num_workers: 8
+    shuffle: True
+    drop_last: True
+
+  datamodules:
+    Flickr30k:
+      data_path: ${data_path}
+      num_max_bpe_tokens: ${nlp_context_length}
+      color_jitter: # None
+      beit_transforms: False
+      crop_scale: [0.5, 1.0]
+      text_token_mask_prob: 0.0
 
 checkpoint:
   common:

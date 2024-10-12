@@ -7,16 +7,17 @@ import os
 import json
 import zipfile
 from torchvision.datasets.utils import download_url
-from functools import partial
 from .base_datasets import BaseImageText
+from registries import register_dataset
 
+@register_dataset(name='COCOCaptions')
 class COCOCaptions(BaseImageText):
     def __init__(
         self,
         data_path,
         split,
         num_max_bpe_tokens=64,
-        task="captioning",
+        task="captioning", # TODO
         color_jitter=None,
         beit_transforms=False,
         crop_scale=(0.6, 1.0),
@@ -109,6 +110,7 @@ class COCOCaptions(BaseImageText):
         ]
 
 
+@register_dataset(name='Flickr30k')
 class Flickr30Dataset(BaseImageText):
     def __init__(self,
                  data_path,
@@ -250,10 +252,10 @@ class ConceptualCaptions(BaseImageText):
         write_data_into_jsonl(items, os.path.join(self.path_to_data, self.get_index_files()[0]))
 
 
-MULTIMODAL_DATASET_REGISTRY = {
-    "coco_captions": COCOCaptions,
-    "flickr30": Flickr30Dataset,
-    "conceptual_captions": ConceptualCaptions,
-    "conceptual_captions_cc3m": partial(ConceptualCaptions, type="cc3m"),
-    "conceptual_captions_cc12m": partial(ConceptualCaptions, type="cc12m"),
-}
+@register_dataset(name="ConceptualCaptions3m")
+def conceptual_captions_cc3m(*args, **kwargs):
+    return ConceptualCaptions(*args, type="cc3m", **kwargs)
+
+@register_dataset(name="ConceptualCaptions12m")
+def conceptual_captions_cc12m(*args, **kwargs):
+    return ConceptualCaptions(*args, type="cc12m", **kwargs)

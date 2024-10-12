@@ -2,15 +2,16 @@ import os
 import logging
 import json
 from typing import *
-from functools import partial
 from .data_utils import write_data_into_jsonl
 from torchvision.datasets import CIFAR10, CIFAR100
 from .base_datasets import ImageDataset
 from utils import Modality
 from .imagenet_classes import IMAGENET2012_CLASSES
+from registries import register_dataset
 
 logger = logging.getLogger(__name__)
 
+@register_dataset(name='ImageNet')
 class ImageNetDataset(ImageDataset):
     def __init__(
             self,
@@ -85,7 +86,7 @@ class ImageNetDataset(ImageDataset):
 
         write_data_into_jsonl(items, os.path.join(self.path_to_data, f'imagenet.{self.split}.jsonl'))
 
-    
+
 class CIFARDataset(ImageDataset):
     def __init__(self, 
                  data_path:str,
@@ -127,9 +128,10 @@ class CIFARDataset(ImageDataset):
         item = self.items[index]
         return {"image": item[0], "target": item[1]}
 
+@register_dataset(name="CIFAR-10")
+def cifar_10(*args, **kwargs):
+    return CIFARDataset(*args, type="cifar10", **kwargs)
 
-UNIMODAL_DATASET_REGISTRY = {
-    "imagenet": ImageNetDataset,
-    "cifar10": partial(CIFARDataset, type='cifar10'),
-    "cifar100": partial(CIFARDataset, type='cifar100'),
-}
+@register_dataset(name="CIFAR-100")
+def cifar_100(*args, **kwargs):
+    return CIFARDataset(*args, type="cifar100", **kwargs)

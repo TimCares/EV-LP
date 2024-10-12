@@ -1,7 +1,9 @@
 import torch
 from utils import Modality
 from .base_datasets import BaseDataset
+from registries import register_dataset
 
+@register_dataset(name='Dummy')
 class DummyDataset(BaseDataset):
     def __init__(self, size=50000, dim=20):
         """
@@ -29,7 +31,3 @@ class DummyDataset(BaseDataset):
         out['x'] = x
         out['target'] = y
         return out
-
-DUMMY_DATASET_REGISTRY = {
-    'dummy': DummyDataset
-}

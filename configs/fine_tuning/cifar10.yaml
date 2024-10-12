@@ -41,17 +41,19 @@ model:
   prediction_mode: mean_pooling
 
 data:
-  _name: cifar10
-  aa: rand-m9-mstd0.5-inc1
-  reprob: 0.25
-  remode: pixel
-  recount: 1
+  dataloader:
+    batch_size: 256
+    num_workers: 8
+    shuffle: True
+    drop_last: True
 
-  data_path: ${data_path}
-  batch_size: 256
-  num_workers: 8
-  shuffle: True
-  drop_last: True
+  datamodules:
+    CIFAR-10:
+      data_path: ${data_path}
+      aa: rand-m9-mstd0.5-inc1
+      reprob: 0.25
+      remode: pixel
+      recount: 1
 
 optimizer:
   lr: 0.001

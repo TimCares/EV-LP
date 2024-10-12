@@ -6,8 +6,7 @@ import os
 from pytorch_lightning import LightningModule
 import sys
 sys.path.append('beit2')
-from registries import MODEL_REGISTRY
-from datamodules import DATAMODULE_REGISTRY
+from registries import MODEL_REGISTRY, DATAMODULE_REGISTRY
 from omegaconf import DictConfig, open_dict
 import hydra
 import json

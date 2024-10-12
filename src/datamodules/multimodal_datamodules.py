@@ -1,7 +1,8 @@
 from .unimodal_datamodules import BaseDataModule
 from datasets_ import COCOCaptions, Flickr30Dataset, ConceptualCaptions
-from functools import partial
+from registries import register_datamodule
 
+@register_datamodule(name='COCOCaptions')
 class COCOCaptionsDataModule(BaseDataModule):
     def __init__(self,
                 data_path,
@@ -91,6 +92,7 @@ class ConceptualCaptionsDataModule(BaseDataModule):
             text_token_mask_prob=self.text_token_mask_prob,)
 
 
+@register_datamodule(name='Flickr30k')
 class Flickr30DataModule(BaseDataModule):
     def __init__(self,
                  data_path,
@@ -136,10 +138,10 @@ class Flickr30DataModule(BaseDataModule):
                                             text_token_mask_prob=self.text_token_mask_prob,)
 
 
-MULTIMODAL_DATAMODULE_REGISTRY = {
-    "coco_captions": COCOCaptionsDataModule,
-    "conceptual_captions": ConceptualCaptionsDataModule,
-    "conceptual_captions_3m": partial(ConceptualCaptionsDataModule, type='cc3m'),
-    "conceptual_captions_12m": partial(ConceptualCaptionsDataModule, type='cc12m'),
-    "flickr30": Flickr30DataModule,
-}
+@register_datamodule(name="ConceptualCaptions3m")
+def conceptual_captions_cc3m(*args, **kwargs):
+    return ConceptualCaptionsDataModule(*args, type="cc3m", **kwargs)
+
+@register_datamodule(name="ConceptualCaptions12m")
+def conceptual_captions_cc12m(*args, **kwargs):
+    return ConceptualCaptionsDataModule(*args, type="cc12m", **kwargs)

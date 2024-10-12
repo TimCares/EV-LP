@@ -15,13 +15,13 @@ data:
     num_max_bpe_tokens: 64
 
   datamodules:
-    coco_captions:
+    COCOCaptions:
       task: captioning
       color_jitter: # None
       beit_transforms: False
       crop_scale: [1.0, 1.0]
 
-    flickr30:
+    Flickr30k:
       color_jitter: # None
       beit_transforms: False
       crop_scale: [1.0, 1.0]

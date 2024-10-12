@@ -6,7 +6,7 @@ from pytorch_lightning.utilities import rank_zero_only
 import sys
 import os
 sys.path.append('..')
-from datamodules import DATAMODULE_REGISTRY
+from registries import DATAMODULE_REGISTRY
 from data.imagenet_zeroshot_data import (
     imagenet_classnames,
     openai_imagenet_template,
@@ -102,7 +102,7 @@ class ImageNetZeroShotCallback(Callback):
             'shuffle':False,
             'drop_last':False,
         }
-        self.datamodule = DATAMODULE_REGISTRY['imagenet'](**imagenet_args)
+        self.datamodule = DATAMODULE_REGISTRY['ImageNet'](**imagenet_args)
 
     def validate(self, trainer, pl_module) -> None:
         metrics = run_imagenet_zero_shot(

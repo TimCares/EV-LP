@@ -8,8 +8,8 @@ from pytorch_lightning import seed_everything, Trainer, LightningDataModule
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelSummary, ModelCheckpoint
 import sys
 sys.path.append("beit2")
-from registries import MODEL_REGISTRY, MODEL_CONFIG_REGISTRY
-from datamodules import DATAMODULE_REGISTRY, MultiDataModule
+from registries import MODEL_REGISTRY, MODEL_CONFIG_REGISTRY, DATAMODULE_REGISTRY
+from datamodules import MultiDataModule
 from callbacks import (
     ImageNetZeroShotCallback,
     WallClockCallback,

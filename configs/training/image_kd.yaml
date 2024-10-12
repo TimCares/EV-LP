@@ -10,9 +10,9 @@ data_path: ${base_dir}
 log_dir: ${base_dir}/logs
 seed: 42
 
-run_name: image_kd
+run_name: ImageKD
 id:
-model_name: image_kd
+model_name: ImageKD
 
 load_checkpoint:
 
@@ -29,17 +29,18 @@ model:
   depth: 6
 
 data:
-  _name: imagenet
-  data_path: ${data_path}
-  pretraining: True
-  beit_transforms: False
-  crop_scale: [0.08, 1.0]
+  dataloader:
+    batch_size: 256
+    num_workers: 8
+    shuffle: True
+    drop_last: True
 
-  batch_size: 256
-  num_workers: 8
-  shuffle: True
-  drop_last: True
-
+  datamodules:
+    ImageNet:
+      data_path: ${data_path}
+      pretraining: True
+      beit_transforms: False
+      crop_scale: [0.08, 1.0]
 
 checkpoint:
   common:

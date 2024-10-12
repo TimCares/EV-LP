@@ -10,7 +10,7 @@ data_path: ${base_dir}
 log_dir: ${base_dir}/logs
 seed: 42
 
-run_name: SHRe_transformer_only_single_itc
+run_name: SHRe
 id:
 model_name: SHRe
 
@@ -38,12 +38,12 @@ data:
     text_token_mask_prob: 0.0
 
   datamodules:
-    coco_captions:
+    COCOCaptions:
       task: captioning
 
-    conceptual_captions_3m: {}
+    ConceptualCaptions3m: {}
 
-    conceptual_captions_12m: {}
+    ConceptualCaptions12m: {}
 
 checkpoint:
   common:

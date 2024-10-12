@@ -10,9 +10,9 @@ data_path: ${base_dir}
 log_dir: ${base_dir}/logs
 seed: 42
 
-run_name: text_kd
+run_name: TextKD
 id:
-model_name: text_kd
+model_name: TextKD
 
 load_checkpoint:
 
@@ -20,19 +20,19 @@ model:
   depth: 6
 
 data:
-  _name: masked_lm # dataset name
+  dataloader:
+    batch_size: 256
+    num_workers: 8
+    shuffle: True
+    drop_last: True
 
-  name: openwebtext # name of the (masked) language modeling dataset
-  data_path: /workspace
-  text_file: /workspace/openwebtext.txt
-  block_size: 256
-  mask_prob: 0.0
-
-  batch_size: 256
-  num_workers: 8
-  shuffle: True
-  drop_last: True
-
+  datamodules:
+    MaskedLM:
+      name: openwebtext # name of the (masked) language modeling dataset
+      data_path: /workspace
+      text_file: /workspace/openwebtext.txt
+      block_size: 256
+      mask_prob: 0.0
 
 checkpoint:
   common:

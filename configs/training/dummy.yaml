@@ -10,7 +10,7 @@ data_path: ${base_dir}
 log_dir: ${base_dir}/logs
 seed: 42
 
-run_name: dummy_run
+run_name: Dummy
 id:
 model_name: Dummy
 
@@ -25,7 +25,7 @@ data:
     drop_last: True
 
   datamodules:
-    dummy:
+    Dummy:
       size: 30000
       dim: 20
 

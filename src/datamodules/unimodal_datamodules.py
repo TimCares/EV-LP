@@ -1,9 +1,8 @@
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
-from typing import Tuple, Dict, Any, List
+from typing import Tuple
 from datasets_ import ImageNetDataset, MaskedLMDataset
-from datasets_ import DATASET_REGISTRY
-from functools import partial
+from registries import register_datamodule, DATASET_REGISTRY
 from utils import Modality
 import os
 from transformers import BertTokenizer
@@ -94,6 +93,7 @@ class BaseDataModule(LightningDataModule):
                 del self.test_dataset
 
 
+@register_datamodule(name='MaskedLM')
 class MaskedLMDataModule(BaseDataModule):
     def __init__(
         self,
@@ -176,6 +176,7 @@ class CIFARDataModule(BaseDataModule):
                                                         aa=self.aa, reprob=self.reprob, remode=self.remode, recount=self.recount)
 
 
+@register_datamodule(name='ImageNet')
 class ImageNetDataModule(BaseDataModule):
     def __init__(
             self,
@@ -231,9 +232,10 @@ class ImageNetDataModule(BaseDataModule):
                                            )
 
 
-UNIMODAL_DATAMODULE_REGISTRY = {
-    'masked_lm': MaskedLMDataModule,
-    'cifar10': partial(CIFARDataModule, type='cifar10'),
-    'cifar100': partial(CIFARDataModule, type='cifar100'),
-    'imagenet': ImageNetDataModule,
-}
+@register_datamodule(name="CIFAR-10")
+def cifar_10(*args, **kwargs):
+    return CIFARDataModule(*args, type="cifar10", **kwargs)
+
+@register_datamodule(name="CIFAR-100")
+def cifar_100(*args, **kwargs):
+    return CIFARDataModule(*args, type="cifar100", **kwargs)

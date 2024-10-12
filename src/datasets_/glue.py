@@ -1,8 +1,6 @@
 import torchtext
 from .base_datasets import BaseDataset
-from typing import Tuple
 import os
-from utils import pad_text_sequence
 from .data_utils import write_data_into_jsonl
 import json
 from utils import Modality
@@ -12,6 +10,7 @@ from torchvision.datasets.utils import download_url
 import pandas as pd
 import zipfile
 from transformers import BertTokenizer
+from registries import register_dataset
 
 class GLUE(BaseDataset):
     def __init__(
@@ -81,6 +80,7 @@ class GLUE(BaseDataset):
         raise NotImplementedError()
     
 
+@register_dataset(name='cola_glue')
 class CoLA(GLUE):
     def _dataset(self, split):
         return torchtext.datasets.CoLA(root=self.path_to_data, split=split)
@@ -108,6 +108,7 @@ class CoLA(GLUE):
         return items
     
 
+@register_dataset(name='sst_glue')
 class SST(GLUE):
     def _dataset(self, split):
         return torchtext.datasets.SST2(root=self.path_to_data, split=split)
@@ -136,6 +137,7 @@ class SST(GLUE):
         return items
     
 
+@register_dataset(name='qnli_glue')
 class QNLI(GLUE):
     def _dataset(self, split):
         return torchtext.datasets.QNLI(root=self.path_to_data, split=split)
@@ -165,6 +167,7 @@ class QNLI(GLUE):
         return items
     
 
+@register_dataset(name='rte_glue')
 class RTE(QNLI):
     def _dataset(self, split):
         return torchtext.datasets.RTE(root=self.path_to_data, split=split)
@@ -176,6 +179,7 @@ class RTE(QNLI):
     def _get_max_length(self, data_loader) -> int:
         return max([len(d[1])+len(d[2]) for d in data_loader])
 
+@register_dataset(name='mrpc_glue')
 class MRPC(RTE):
     def _dataset(self, split):
         return torchtext.datasets.MRPC(root=self.path_to_data, split=split)
@@ -184,7 +188,7 @@ class MRPC(RTE):
     def _dataset_name(self):
         return 'mrpc'
 
-#https://dl.fbaipublicfiles.com/glue/data/QQP-clean.zip
+@register_dataset(name='qqp_glue')
 class QQP(GLUE):
     def __init__(
             self,
@@ -248,6 +252,7 @@ class QQP(GLUE):
         return items
     
 
+@register_dataset(name='stsb_glue')
 class STSB(RTE):
     def _dataset(self, split):
         return torchtext.datasets.STSB(root=self.path_to_data, split=split)
@@ -277,6 +282,7 @@ class STSB(RTE):
         return items
     
 
+@register_dataset(name='mnli_glue')
 class MNLI(RTE):
     def _dataset(self, split):
         return torchtext.datasets.MNLI(root=self.path_to_data, split=split)
@@ -287,7 +293,8 @@ class MNLI(RTE):
     @property
     def _dataset_name(self):
         return 'mnli'
-    
+
+@register_dataset(name='wnli_glue')    
 class WNLI(RTE):
     def _dataset(self, split):
         return torchtext.datasets.WNLI(root=self.path_to_data, split=split)
@@ -298,16 +305,3 @@ class WNLI(RTE):
     @property
     def _dataset_name(self):
         return 'wnli'
-    
-
-GLUE_DATASET_REGISTRY = {
-    'cola_glue': CoLA,
-    'sst_glue': SST,
-    'qnli_glue': QNLI,
-    'rte_glue': RTE,
-    'mrpc_glue': MRPC,
-    'qqp_glue': QQP,
-    'stsb_glue': STSB,
-    'mnli_glue': MNLI,
-    'wnli_glue': WNLI,
-}

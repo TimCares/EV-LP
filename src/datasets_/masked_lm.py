@@ -13,6 +13,7 @@ try:
     import pyarrow.plasma as plasma
 except ImportError:
     plasma = None
+from registries import register_dataset
 
 def init_worker(tokenizer_path):
     global tokenizer
@@ -22,6 +23,7 @@ def tokenize_line(line):
     return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line.strip()))
 
 
+@register_dataset(name='MaskedLM')
 class MaskedLMDataset(BaseDataset):
     def __init__(
         self,

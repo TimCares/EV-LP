@@ -41,18 +41,20 @@ model:
   prediction_mode: mean_pooling
 
 data:
-  _name: imagenet
-  pretraining: False
-  aa: rand-m9-mstd0.5-inc1
-  reprob: 0.25
-  remode: pixel
-  recount: 1
+  dataloader:
+    batch_size: 256
+    num_workers: 8
+    shuffle: True
+    drop_last: True
 
-  data_path: ${data_path}
-  batch_size: 256
-  num_workers: 8
-  shuffle: True
-  drop_last: True
+  datamodules:
+    ImageNet:
+      data_path: ${data_path}
+      pretraining: False
+      aa: rand-m9-mstd0.5-inc1
+      reprob: 0.25
+      remode: pixel
+      recount: 1
 
 optimizer:
   lr: 0.001

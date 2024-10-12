@@ -1,8 +1,8 @@
-from datasets_ import GLUE_DATASET_REGISTRY
 from .unimodal_datamodules import BaseDataModule
 from functools import partial
 from utils import Modality
 from torch.utils.data import DataLoader
+from registries import register_datamodule, DATASET_REGISTRY
 
 class GLUEDataModule(BaseDataModule):
     def __init__(self,
@@ -34,7 +34,7 @@ class GLUEDataModule(BaseDataModule):
             self.test_dataset.load()
     
     def set_train_dataset(self):
-        self.train_dataset = GLUE_DATASET_REGISTRY[self.dataset](
+        self.train_dataset = DATASET_REGISTRY[self.dataset](
             data_path=self.data_path, 
             split='train', 
             num_max_bpe_tokens=self.num_max_bpe_tokens
@@ -42,18 +42,18 @@ class GLUEDataModule(BaseDataModule):
 
     def set_val_dataset(self):
         if self.dataset == 'mnli_glue':
-            self.val_dataset_1 = GLUE_DATASET_REGISTRY[self.dataset](
+            self.val_dataset_1 = DATASET_REGISTRY[self.dataset](
                 data_path=self.data_path, 
                 split='dev_matched', 
                 num_max_bpe_tokens=self.num_max_bpe_tokens
             )
-            self.val_dataset_2 = GLUE_DATASET_REGISTRY[self.dataset](
+            self.val_dataset_2 = DATASET_REGISTRY[self.dataset](
                 data_path=self.data_path, 
                 split='dev_mismatched', 
                 num_max_bpe_tokens=self.num_max_bpe_tokens
             )
         else:
-            self.val_dataset = GLUE_DATASET_REGISTRY[self.dataset](
+            self.val_dataset = DATASET_REGISTRY[self.dataset](
                 data_path=self.data_path, 
                 split=self.val_split_name, 
                 num_max_bpe_tokens=self.num_max_bpe_tokens
@@ -88,6 +88,7 @@ class GLUEDataModule(BaseDataModule):
             return val_dataloders
 
 
-GLUE_DATAMODULE_REGISTRY = {
-    dataset: partial(GLUEDataModule, dataset=dataset) for dataset in GLUE_DATASET_REGISTRY.keys()
-}
+for ds_key in DATASET_REGISTRY:
+    if 'glue' in ds_key:
+        dataset_func = partial(GLUEDataModule, dataset=ds_key)
+        register_datamodule(name=ds_key)(dataset_func)
