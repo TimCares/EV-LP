@@ -5,7 +5,7 @@ from typing import Dict, Any
 import logging
 import pytorch_lightning as L
 from dataclasses import dataclass
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
 from . import MODEL_REGISTRY
 from utils import freeze_module

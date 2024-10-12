@@ -5,7 +5,7 @@ import os
 from utils import pad_text_sequence
 from .data_utils import write_data_into_jsonl
 import json
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 from typing import List, Dict, Any
 import shutil
 from torchvision.datasets.utils import download_url

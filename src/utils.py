@@ -1,9 +1,7 @@
 from omegaconf import OmegaConf
-import os
 import torch
 import logging
 from functools import partial
-from collections import namedtuple
 import logging
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
@@ -13,11 +11,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 from data2vec_fairseq.models.data2vec2 import Data2VecMultiModel
 from data2vec_fairseq.models.data2vec2 import Data2VecMultiConfig
-from data2vec_fairseq.data.modality import Modality
 from beit2.modeling_pretrain import VisionTransformerForMaskedImageModeling
 from timm.models.layers import trunc_normal_ as __call_trunc_normal_
+from enum import Enum, auto
 
 logger = logging.getLogger(__name__)
+
+class Modality(Enum):
+    AUDIO = auto()
+    IMAGE = auto()
+    TEXT = auto()
+    VL = auto() # Vision-Language
+    VA = auto() # Vision-Audio
+    LA = auto() # Language-Audio
 
 def load_model(pretrained_model_cfg:DictConfig,
                model_state_dict:OrderedDict[str, torch.Tensor]) -> Data2VecMultiModel:

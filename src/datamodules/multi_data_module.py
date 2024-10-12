@@ -3,7 +3,7 @@ from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader 
 from torch.utils.data.dataset import ConcatDataset
 import torch
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 
 class MultiDataModule(LightningDataModule):
     def __init__(

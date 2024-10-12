@@ -4,7 +4,7 @@ from typing import Tuple, Dict, Any, List
 from datasets_ import ImageNetDataset, MaskedLMDataset
 from datasets_ import DATASET_REGISTRY
 from functools import partial
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 import os
 from transformers import BertTokenizer
 

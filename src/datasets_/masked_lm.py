@@ -6,7 +6,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 from typing import Any
 from .base_datasets import BaseDataset
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 import subprocess
 import tempfile
 try:

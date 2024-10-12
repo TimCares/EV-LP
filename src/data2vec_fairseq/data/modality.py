@@ -12,6 +12,3 @@ class Modality(Enum):
     AUDIO = auto()
     IMAGE = auto()
     TEXT = auto()
-    VL = auto()
-    VA = auto()
-    LA = auto()

@@ -6,7 +6,7 @@ from functools import partial
 from .data_utils import write_data_into_jsonl
 from torchvision.datasets import CIFAR10, CIFAR100
 from .base_datasets import ImageDataset
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 from .imagenet_classes import IMAGENET2012_CLASSES
 
 logger = logging.getLogger(__name__)

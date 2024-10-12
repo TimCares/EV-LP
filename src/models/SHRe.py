@@ -9,7 +9,7 @@ import logging
 import pytorch_lightning as L
 import json
 from dataclasses import dataclass
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
 from utils import init_weights
 from transformers import BertModel

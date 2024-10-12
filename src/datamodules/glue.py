@@ -1,7 +1,7 @@
 from datasets_ import GLUE_DATASET_REGISTRY
 from .unimodal_datamodules import BaseDataModule
 from functools import partial
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 from torch.utils.data import DataLoader
 
 class GLUEDataModule(BaseDataModule):

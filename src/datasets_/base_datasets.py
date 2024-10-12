@@ -7,7 +7,7 @@ import numpy as np
 from collections import namedtuple
 from .data_utils import get_transforms
 import random
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 from utils import pad_text_sequence
 from torchvision.datasets.folder import default_loader
 from transformers import BertTokenizer

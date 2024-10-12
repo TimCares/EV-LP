@@ -11,7 +11,7 @@ import pytorch_lightning as L
 import json
 from timm.models.vision_transformer import LayerScale
 from dataclasses import dataclass, field
-from data2vec_fairseq.data.modality import Modality
+from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
 from utils import init_weights
 from transformers import BertModel
