@@ -1,54 +1,22 @@
-import torch
-from torch.utils.data import Dataset
 from .unimodal_datamodules import BaseDataModule
-from utils import Modality
+from datasets_ import DummyDataset
+import os
 
-class DummyDataset(Dataset):
-    def __init__(self, size=50000, dim=20):
-        """
-        Args:
-            size (int): Number of data points in the dataset.
-            dim (int): Dimensionality of each data point.
-        """
+class DummyDataModule(BaseDataModule):
+    def __init__(self, data_path:os.PathLike="/workspace", size:int=30000, dim:int=20, *args, **kwargs):
+        super().__init__(data_path=data_path, *args, **kwargs)
         self.size = size
         self.dim = dim
 
-    def load(self):
-        pass
-
-    def collater(self, batch):
-        # we use text as an example here
-        data = {
-            'text': torch.stack([batch[i]['input'] for i in range(len(batch))]),
-            'padding_mask': torch.ones(len(batch), 512).float(),
-            'modes': [Modality.TEXT],
-            'id': torch.arange(len(batch)),
-            'target': torch.stack([batch[i]['target'] for i in range(len(batch))]),
-        }
-        return data
-
-    def __len__(self):
-        return self.size
-
-    def __getitem__(self, index):
-        # Retrieve the data point at the specified index
-        return {'input': torch.randn(512, self.dim), 'target': torch.randn(self.dim)}
-
-
-class DummyDataModule(BaseDataModule):
-    def __init__(self):
-        super().__init__(data_path="",
-                        batch_size=64,
-                        num_workers=1,
-                        shuffle=False,
-                        drop_last=False,)
-        
-    def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
-            self.train_dataset.load()
-
     def set_train_dataset(self):
-        self.train_dataset =  DummyDataset(size=10000, dim=20)
+        self.train_dataset =  DummyDataset(size=self.size, dim=self.dim)
+
+    def set_val_dataset(self):
+        self.val_dataset =  DummyDataset(size=self.size//10, dim=self.dim)
+
+    def set_test_dataset(self):
+        self.test_dataset =  DummyDataset(size=self.size//10, dim=self.dim)
+
 
 DUMMY_DATAMODULE_REGISTRY = {
     'dummy': DummyDataModule

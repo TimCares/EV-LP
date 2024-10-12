@@ -1,0 +1,60 @@
+# @package _global_
+
+hydra:
+  run:
+    dir: .
+
+base_dir: ../data
+model_path: ${base_dir}/models
+data_path: ${base_dir}
+log_dir: ${base_dir}/logs
+seed: 42
+
+run_name: dummy_run
+id:
+model_name: Dummy
+
+model:
+  embed_dim: 20
+
+data:
+  dataloader:
+    batch_size: 64
+    num_workers: 2
+    shuffle: True
+    drop_last: True
+
+  datamodules:
+    dummy:
+      size: 30000
+      dim: 20
+
+checkpoint:
+  common:
+    dirpath: ${model_path}/${run_name}
+    enable_version_counter: False
+    every_n_epochs: 1
+    save_on_train_epoch_end: False # False -> run at end of validation
+    verbose: True
+    auto_insert_metric_name: False
+
+  checkpoints:
+    - monitor: val/loss
+      mode: min
+      filename: model-{step}-{${.monitor}:.4f}-val
+
+    - monitor: train/loss
+      mode: min
+      filename: model-{step}-{${.monitor}:.4f}-train
+
+optimizer:
+  base_lr: 0.0001
+  betas: [ 0.9,0.98 ]
+  eps: 1e-06
+  weight_decay: 0.01
+  max_steps: 937 # math.floor(30000 / 64 * 2) -> math.floor(num_samples / batch_size * max_epochs)
+
+lightning_trainer:
+  default_root_dir: ${log_dir}
+  max_epochs: 2
+  log_every_n_steps: 50

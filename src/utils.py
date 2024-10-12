@@ -24,6 +24,7 @@ class Modality(Enum):
     VL = auto() # Vision-Language
     VA = auto() # Vision-Audio
     LA = auto() # Language-Audio
+    DUMMY = auto()
 
 def load_model(pretrained_model_cfg:DictConfig,
                model_state_dict:OrderedDict[str, torch.Tensor]) -> Data2VecMultiModel:

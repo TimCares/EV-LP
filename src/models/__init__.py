@@ -6,3 +6,4 @@ from .image_kd import ImageKDPreTrainingLightningModule, ImageKDConfig
 from .image_classification import ImageClassificationModel, ImageClassificationConfig
 from .text_classification import TextClassificationLightningModule, TextClassificationConfig
 from .retrieval_finetune import RetrievalLightningModule
+from .dummy import DummyPreTrainingLightningModule, DummyModelConfig

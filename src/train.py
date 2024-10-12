@@ -29,7 +29,7 @@ def main(cfg: DictConfig) -> None:
     # model setup
     if 'cfg' in MODEL_REGISTRY[cfg.model_name].keys():
         cfg_cls = MODEL_REGISTRY[cfg.model_name]['cfg']
-        cfg.model = OmegaConf.merge(cfg_cls(), cfg)
+        cfg.model = OmegaConf.merge(cfg_cls(), cfg.model)
     module_cls = MODEL_REGISTRY[cfg.model_name]['module']
 
     module = module_cls(cfg)
@@ -57,9 +57,11 @@ def main(cfg: DictConfig) -> None:
     trainer_args = OmegaConf.to_container(cfg.lightning_trainer, resolve=True)
     if 'strategy' not in trainer_args:
         if 'deepspeed' in trainer_args:
+            assert torch.cuda.is_available(), "No CUDA device available."
             from pytorch_lightning.strategies import DeepSpeedStrategy
             trainer_args['strategy'] = DeepSpeedStrategy(**trainer_args.pop('deepspeed'))
         elif 'ddp' in trainer_args:
+            assert torch.cuda.is_available(), "No CUDA device available."
             from pytorch_lightning.strategies import DDPStrategy
             trainer_args['strategy'] = DDPStrategy(**trainer_args.pop('ddp'))
         else:
@@ -67,7 +69,7 @@ def main(cfg: DictConfig) -> None:
 
     # datamodule setup
     dataloader_args = cfg.data.dataloader
-    common_args = cfg.data.common
+    common_args = cfg.data.common if 'common' in cfg.data else {}
 
     datamodules:List[LightningDataModule] = []
     for datamodule_key in cfg.data.datamodules.keys():
