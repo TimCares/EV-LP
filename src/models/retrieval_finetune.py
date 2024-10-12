@@ -3,7 +3,7 @@ from typing import Any, Dict
 from pytorch_lightning import LightningModule
 import torch
 import pytorch_lightning as L
-from models import MODEL_REGISTRY
+from registries import register_model, MODEL_REGISTRY
 from modules import ClipLoss
 import json
 from transformers.optimization import get_cosine_schedule_with_warmup
@@ -13,6 +13,7 @@ from .S_SMKE import S_SMKEConfig
 logger = logging.getLogger(__name__)
 
 
+@register_model(name='RetrievalFinetune')
 class RetrievalLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -24,7 +25,7 @@ class RetrievalLightningModule(L.LightningModule):
             pretrained_args.model = OmegaConf.merge(current_config, pretrained_args.model)
             pretrained_args.model.dropout = self.cfg.dropout
         
-        model_cls:LightningModule = MODEL_REGISTRY[self.cfg.pretrained.model_name]['module']
+        model_cls:LightningModule = MODEL_REGISTRY[self.cfg.pretrained.model_name]
         self.module = model_cls.load_from_checkpoint(self.cfg.pretrained.model_path, strict=False, cfg=pretrained_args)
         del self.module.teacher
         del self.module.logit_scale_target
@@ -146,7 +147,3 @@ class RetrievalLightningModule(L.LightningModule):
         
     def log(self, *args, **kwargs):
         super().log(batch_size=self.cfg.data.batch_size, sync_dist=True, *args, **kwargs)
-
-MODEL_REGISTRY['retrieval_finetune'] = {
-    'module': RetrievalLightningModule,
-}

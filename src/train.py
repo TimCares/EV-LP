@@ -8,7 +8,7 @@ from pytorch_lightning import seed_everything, Trainer, LightningDataModule
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelSummary, ModelCheckpoint
 import sys
 sys.path.append("beit2")
-from models import MODEL_REGISTRY
+from registries import MODEL_REGISTRY, MODEL_CONFIG_REGISTRY
 from datamodules import DATAMODULE_REGISTRY, MultiDataModule
 from callbacks import (
     ImageNetZeroShotCallback,
@@ -26,15 +26,15 @@ def main(cfg: DictConfig) -> None:
     if 'seed' in cfg and cfg.seed is not None:
         seed_everything(seed=cfg.seed, workers=True)
 
-    # model setup
-    if 'cfg' in MODEL_REGISTRY[cfg.model_name].keys():
-        cfg_cls = MODEL_REGISTRY[cfg.model_name]['cfg']
+    ### model setup
+    if cfg.model_name in MODEL_CONFIG_REGISTRY.keys(): # some models don't have a config
+        cfg_cls = MODEL_CONFIG_REGISTRY[cfg.model_name]
+        # override config with CLI and .yaml config args
         cfg.model = OmegaConf.merge(cfg_cls(), cfg.model)
-    module_cls = MODEL_REGISTRY[cfg.model_name]['module']
+    # get the model and pass the config
+    module = MODEL_REGISTRY[cfg.model_name](cfg)
 
-    module = module_cls(cfg)
-
-    # callbacks setup
+    ### callbacks setup
     callbacks = [
         ModelSummary(),
         LearningRateMonitor(logging_interval="step"),
@@ -52,7 +52,7 @@ def main(cfg: DictConfig) -> None:
             args = OmegaConf.to_container(ckpt, resolve=True) | common_checkpoint_args
             callbacks.append(ModelCheckpoint(**args))
 
-    # strategy setup
+    ### strategy setup
     torch.set_float32_matmul_precision("high") # or: "highest"
     trainer_args = OmegaConf.to_container(cfg.lightning_trainer, resolve=True)
     if 'strategy' not in trainer_args:
@@ -67,7 +67,7 @@ def main(cfg: DictConfig) -> None:
         else:
             trainer_args['strategy'] = 'auto'
 
-    # datamodule setup
+    ### datamodule setup
     dataloader_args = cfg.data.dataloader
     common_args = cfg.data.common if 'common' in cfg.data else {}
 
@@ -91,7 +91,7 @@ def main(cfg: DictConfig) -> None:
     datamodule.setup("fit")
     logger.info("Datamodule setup complete.")
 
-    # trainer setup & training
+    ### trainer setup & training
     trainer = Trainer(
         **trainer_args,
         enable_checkpointing=ckpt in cfg.checkpoint.checkpoints,

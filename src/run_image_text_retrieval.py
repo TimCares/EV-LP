@@ -6,7 +6,7 @@ import os
 from pytorch_lightning import LightningModule
 import sys
 sys.path.append('beit2')
-from models import MODEL_REGISTRY
+from registries import MODEL_REGISTRY
 from datamodules import DATAMODULE_REGISTRY
 from omegaconf import DictConfig, open_dict
 import hydra
@@ -150,7 +150,7 @@ def main(cfg: DictConfig) -> None:
         datamodules.append((datamodule_key, dm))
     
     path = os.path.join(cfg.pretrained_path, cfg.model_version)
-    model_cls:LightningModule = MODEL_REGISTRY[cfg.model_name]['module']
+    model_cls:LightningModule = MODEL_REGISTRY[cfg.model_name]
     model = model_cls.load_from_checkpoint(path).model
     model = model.to(device)
     model.requires_grad_(False)

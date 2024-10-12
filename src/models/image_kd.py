@@ -7,12 +7,13 @@ import pytorch_lightning as L
 from dataclasses import dataclass
 from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
-from . import MODEL_REGISTRY
+from registries import register_model, register_model_config
 from utils import freeze_module
 from utils import load_pretrained_d2v_model, prepare_output
 
 logger = logging.getLogger(__name__)
 
+@register_model(name='ImageKD')
 class ImageKDPreTrainingLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -123,6 +124,7 @@ class ImageKDPreTrainingLightningModule(L.LightningModule):
         super().log(batch_size=self.cfg.data.batch_size, sync_dist=True, *args, **kwargs)
 
 @dataclass
+@register_model_config('ImageKD')
 class ImageKDConfig():
     depth: int = 6
 
@@ -144,9 +146,3 @@ class ImageKDModel(nn.Module):
             source=image,
             remove_extra_tokens=False,
         )
-
-
-MODEL_REGISTRY['image_kd'] = {
-    'cfg': ImageKDConfig,
-    'module': ImageKDPreTrainingLightningModule
-}

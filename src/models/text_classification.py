@@ -10,7 +10,7 @@ from sklearn.metrics import f1_score as f1_score
 from sklearn.metrics import matthews_corrcoef as matthews_corrcoef
 from scipy.stats import spearmanr as spearmanr_
 import numpy as np
-from . import MODEL_REGISTRY
+from registries import register_model, register_model_config, MODEL_REGISTRY
 from pytorch_lightning import LightningModule
 from transformers.optimization import get_polynomial_decay_schedule_with_warmup
 
@@ -31,6 +31,7 @@ _METRIC_REGISTRY = {
     "accuracy": accuracy,
 }
 
+@register_model(name='TextClassification')
 class TextClassificationLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -104,6 +105,7 @@ class TextClassificationLightningModule(L.LightningModule):
         super().log(batch_size=self.cfg.data.batch_size, sync_dist=True, *args, **kwargs)
 
 @dataclass
+@register_model_config('TextClassification')
 class TextClassificationConfig:
     model_path: str = MISSING
     model_name: str = MISSING
@@ -116,7 +118,7 @@ class TextClassificationModel(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        model_cls:LightningModule = MODEL_REGISTRY[self.cfg.model_name]['module']
+        model_cls:LightningModule = MODEL_REGISTRY[self.cfg.model_name]
         self.model = model_cls.load_from_checkpoint(self.cfg.model_path, strict=False).model
         if hasattr(self.model, 'prepare_text_finetuning'):
             self.model.prepare_text_finetuning()
@@ -140,8 +142,3 @@ class TextClassificationModel(nn.Module):
     ):
         x = self.model_call_fn(text=text, attention_mask=attention_mask, token_type_ids=token_type_ids)['pooler_output']
         return self.classification_head(self.dropout(x))
-
-MODEL_REGISTRY['text_classification'] = {
-    'cfg': TextClassificationConfig,
-    'module': TextClassificationLightningModule
-}

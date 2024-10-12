@@ -7,10 +7,11 @@ import json
 from dataclasses import dataclass
 from transformers.optimization import get_cosine_schedule_with_warmup
 from utils import init_weights
-from . import MODEL_REGISTRY
+from registries import register_model, register_model_config
 
 logger = logging.getLogger(__name__)
 
+@register_model(name='Dummy')
 class DummyPreTrainingLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -103,6 +104,7 @@ class DummyPreTrainingLightningModule(L.LightningModule):
         super().log(batch_size=self.cfg.data.dataloader.batch_size, sync_dist=True, *args, **kwargs)
 
 @dataclass
+@register_model_config(name='Dummy')
 class DummyModelConfig():
     embed_dim:int = 20
 
@@ -126,9 +128,3 @@ class DummyModel(nn.Module):
         x:torch.Tensor,
     ):
         return self.nn(x)
-
-
-MODEL_REGISTRY['Dummy'] = {
-    'cfg': DummyModelConfig,
-    'module': DummyPreTrainingLightningModule,
-}

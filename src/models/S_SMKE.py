@@ -15,13 +15,14 @@ from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
 from utils import init_weights
 from transformers import BertModel
-from . import MODEL_REGISTRY
+from registries import register_model, register_model_config
 from modules import Block, ClipLoss, KDClipLoss, KDClipMomentumMemoryBankLoss
 from utils import freeze_module, load_beit2_teacher, load_pretrained_d2v_model
 from beit2.modeling_pretrain import VisionTransformerForMaskedImageModeling
 
 logger = logging.getLogger(__name__)
 
+@register_model(name='S-SMKE')
 class S_SMKEPreTrainingLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -238,6 +239,7 @@ class BEiTv2Config():
     init_values: float =  0.1
 
 @dataclass
+@register_model_config(name='S-SMKE')
 class S_SMKEConfig():
     beitv2: BEiTv2Config = field(default_factory=BEiTv2Config)
 
@@ -383,9 +385,3 @@ class S_SMKE(nn.Module):
         del self.shared
         del self.fc_norm
         del self.head
-        
-
-MODEL_REGISTRY['S-SMKE'] = {
-    'cfg': S_SMKEConfig,
-    'module': S_SMKEPreTrainingLightningModule
-}

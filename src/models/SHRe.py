@@ -14,12 +14,13 @@ from transformers.optimization import get_cosine_schedule_with_warmup
 from utils import init_weights
 from transformers import BertModel
 import timm
-from . import MODEL_REGISTRY
+from registries import register_model, register_model_config
 from modules import Block, ClipLoss
 from utils import freeze_module
 
 logger = logging.getLogger(__name__)
 
+@register_model(name='SHRe')
 class SHRePreTrainingLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -171,6 +172,7 @@ class SHRePreTrainingLightningModule(L.LightningModule):
         super().log(batch_size=self.cfg.data.dataloader.batch_size, sync_dist=True, *args, **kwargs)
 
 @dataclass
+@register_model_config('SHRe')
 class SHReConfig():
     embed_dim: int = 768
     depth: int = 6
@@ -254,8 +256,3 @@ class SHRe(nn.Module):
         x_interm = x_interm / x_interm.norm(dim=-1, keepdim=True)
         out_dict["x_interm"] = x_interm
         return out_dict
-
-MODEL_REGISTRY['SHRe'] = {
-    'cfg': SHReConfig,
-    'module': SHRePreTrainingLightningModule
-}

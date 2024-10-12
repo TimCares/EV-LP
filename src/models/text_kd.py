@@ -7,13 +7,14 @@ import pytorch_lightning as L
 from dataclasses import dataclass
 from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
-from . import MODEL_REGISTRY
+from registries import register_model, register_model_config
 from utils import freeze_module
 from utils import prepare_output
 from transformers import BertModel
 
 logger = logging.getLogger(__name__)
 
+@register_model(name='TextKD')
 class TextKDPreTrainingLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -135,6 +136,7 @@ class TextKDPreTrainingLightningModule(L.LightningModule):
         super().log(batch_size=self.cfg.data.batch_size, sync_dist=True, *args, **kwargs)
 
 @dataclass
+@register_model_config('TextKD')
 class TextKDConfig():
     depth: int = 6
 
@@ -168,9 +170,3 @@ class TextKDModel(nn.Module):
             'pooler_output': out.pooler_output,
         }
         return out_dict
-
-
-MODEL_REGISTRY['text_kd'] = {
-    'cfg': TextKDConfig,
-    'module': TextKDPreTrainingLightningModule
-}

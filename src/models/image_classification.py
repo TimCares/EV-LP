@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict
 from omegaconf import MISSING
-from . import MODEL_REGISTRY
+from registries import register_model, register_model_config, MODEL_REGISTRY
 from pytorch_lightning import LightningModule
 import torch
 import torch.nn as nn
@@ -14,7 +14,7 @@ import json
 
 logger = logging.getLogger(__name__)
 
-
+@register_model(name='ImageClassification')
 class ImageClassificationLightningModule(L.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -150,6 +150,7 @@ class ImageClassificationLightningModule(L.LightningModule):
         super().log(batch_size=self.cfg.data.batch_size, sync_dist=True, *args, **kwargs)
 
 @dataclass
+@register_model_config(name='ImageClassification')
 class ImageClassificationConfig():
     model_path: str = MISSING
     model_name: str = MISSING
@@ -167,7 +168,7 @@ class ImageClassificationModel(nn.Module):
         self.cfg = cfg
         self.linear_classifier = cfg.linear_classifier
 
-        model_cls:LightningModule = MODEL_REGISTRY[self.cfg.model_name]['module']
+        model_cls:LightningModule = MODEL_REGISTRY[self.cfg.model_name]
         self.model = model_cls.load_from_checkpoint(self.cfg.model_path).model
         if hasattr(self.model, 'prepare_image_finetuning'):
             self.model.prepare_image_finetuning()
@@ -212,8 +213,3 @@ class ImageClassificationModel(nn.Module):
             raise Exception(f"unknown prediction mode {self.cfg.prediction_mode.name}")
 
         return self.head(self.head_norm(x))
-
-MODEL_REGISTRY['image_classification'] = {
-    'cfg': ImageClassificationConfig,
-    'module': ImageClassificationLightningModule
-}

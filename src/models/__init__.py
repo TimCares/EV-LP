@@ -1,4 +1,3 @@
-from .model_registry import MODEL_REGISTRY
 from .SHRe import SHRePreTrainingLightningModule, SHReConfig
 from .S_SMKE import S_SMKEPreTrainingLightningModule, S_SMKEConfig
 from .text_kd import TextKDPreTrainingLightningModule, TextKDConfig
