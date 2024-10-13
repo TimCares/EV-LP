@@ -1,3 +1,8 @@
+"""
+Various layers used in (multimodal) Transformer models.
+Build using timm, VLMo and BEiT
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,11 +10,23 @@ from timm.models.vision_transformer import LayerScale
 from timm.layers import Mlp, DropPath
 from typing import Optional
 import torch.distributed as dist
-
-# build using timm, VLMo and BEiT
+from typing import Tuple, Union
 
 class Mlp_(Mlp):
-    def forward(self, x):
+    """
+    Transformer MLP block that also returns the raw output of the first linear layer.
+    """    
+    def forward(self, x:torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """The forward pass of the MLP block.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the raw output of
+                the first linear layer (tuple[0] -> shape (B, T, D_ff)) and the output of the second linear
+                layer (tuple[1] -> shape (B, T, D)).
+        """        
         x = self.fc1(x)
         x_interm = x
         x = self.act(x)
@@ -23,12 +40,12 @@ class Mlp_(Mlp):
 class Attention(nn.Module):
     def __init__(
         self,
-        dim,
-        num_heads=12,
-        qkv_bias=False,
-        qk_scale=None,
-        attn_drop=0.0,
-        proj_drop=0.0,
+        dim:int,
+        num_heads:int=12,
+        qkv_bias:bool=False,
+        qk_scale:float=None,
+        attn_drop:float=0.0,
+        proj_drop:float=0.0,
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -128,26 +145,56 @@ class Block(nn.Module):
 # GatherLayer and  gather_features copied from BEiT-3 -> https://github.com/microsoft/unilm/blob/master/beit3/utils.py
 class GatherLayer(torch.autograd.Function):
     """
-    Gather tensors from all workers with support for backward propagation:
+    Gather tensors from all devices with support for backward propagation:
     This implementation does not cut the gradients as torch.distributed.all_gather does.
     """
     @staticmethod
-    def forward(ctx, x):
+    def forward(ctx, x:torch.Tensor) -> Tuple[torch.Tensor]:
+        """Gathers all tensors from all devices.
+
+        Args:
+            x (torch.Tensor): The tensor to gather from all devices.
+
+        Returns:
+            Tuple[torch.Tensor]: A tuple containing the gathered tensors. One element for each device.
+        """        
         output = [torch.zeros_like(x) for _ in range(dist.get_world_size())]
         dist.all_gather(output, x)
         return tuple(output)
     @staticmethod
-    def backward(ctx, *grads):
+    def backward(ctx, *grads) -> torch.Tensor:
+        """Computes the gradients for the gather operation.
+
+        Args:
+            *grads (Any): The gradients to reduce.
+
+        Returns:
+            torch.Tensor: The gradients for the gather operation on the current device.
+        """        
         all_gradients = torch.stack(grads)
         dist.all_reduce(all_gradients)
         return all_gradients[dist.get_rank()]
 
 
 def gather_features(
-        image_features,
-        text_features,
-        padding_mask=None,
-):
+        image_features:torch.Tensor,
+        text_features:torch.Tensor,
+        padding_mask:torch.Tensor=None,
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Gathers the features from all devices. Useful for e.g. contrastive learning in distributed settings.
+
+    Args:
+        image_features (torch.Tensor): The image features to gather.
+        text_features (torch.Tensor): The text features to gather.
+        padding_mask (torch.Tensor, optional): The padding mask to gather. Defaults to None, meaning no padding mask is gathered.
+
+    Returns:
+        Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]: A tuple containing the gathered
+            image features (tuple[0]) and text features (tuple[1]). If a padding mask is provided,
+            the tuple will also contain the gathered padding mask (tuple[2]).
+            Results will be of shape (B*P, T, D) for image and text features, and (B*P, T) for the padding mask, where B is the batch size
+            and P is the number of devices.
+    """    
     gathered_image_features = GatherLayer.apply(image_features)
     gathered_text_features = GatherLayer.apply(text_features)
     all_image_features = torch.cat(gathered_image_features)
@@ -162,34 +209,42 @@ def gather_features(
 
 
 class Pooler(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size:int) -> None:
+        """A simple pooling layer that pools the first token of the input sequence.
+        Consists of a linear layer and a tanh activation function. Useful as an intermediate for e.g. image-text matching,
+        or for classification tasks (e.g. in BERT).
+
+        Args:
+            hidden_size (int): Dimension of the input features.
+        """        
         super().__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states):
-        first_token_tensor = hidden_states[:, 0]
+    def forward(self, hidden_states:torch.Tensor) -> torch.Tensor:
+        first_token_tensor = hidden_states[:, 0] # hidden_states has shape (batch_size, seq_len, hidden_size)
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
-        return pooled_output
+        return pooled_output # shape (batch_size, hidden_size)
     
 
+# copied from VLMo repo -> https://github.com/microsoft/unilm/blob/master/vlmo/vlmo/modules/multiway_transformer.py
 class MoMEBlock(nn.Module):
     def __init__(
         self,
-        dim,
-        num_heads,
-        mlp_ratio=4.0,
-        qkv_bias=False,
-        qk_scale=None,
-        drop=0.0,
-        attn_drop=0.0,
-        drop_path=0.0,
+        dim:int,
+        num_heads:int,
+        mlp_ratio:float=4.0,
+        qkv_bias:bool=False,
+        qk_scale:bool=None,
+        drop:float=0.0,
+        attn_drop:float=0.0,
+        drop_path:float=0.0,
         act_layer=nn.GELU,
         norm_layer=nn.LayerNorm,
-        with_vlffn=False,
-        layer_scale_init_values=0.1,
-        max_text_len=40,
+        with_vlffn:bool=False,
+        layer_scale_init_values:float=0.1,
+        max_text_len:int=40,
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
@@ -201,7 +256,6 @@ class MoMEBlock(nn.Module):
             attn_drop=attn_drop,
             proj_drop=drop,
         )
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2_text = norm_layer(dim)
         self.norm2_imag = norm_layer(dim)
@@ -237,7 +291,7 @@ class MoMEBlock(nn.Module):
 
         self.max_text_len = max_text_len
 
-    def forward(self, x, mask=None, modality_type=None):
+    def forward(self, x:torch.Tensor, mask:torch.Tensor=None, modality_type:str=None) -> torch.Tensor:
         x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x), mask=mask))
 
         if modality_type == "image":

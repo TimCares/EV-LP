@@ -1,22 +1,29 @@
+"""
+This module contains the implementation of various loss functions used in the project.
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import einops
-import opt_einsum
-import pytorch_lightning as L
-from timm.models.layers import trunc_normal_
 from .layers import gather_features, GatherLayer
-from .cmli import infer_cmli_logits, masked_mean, max_neg_value, to_half, remove_cls
-from typing import Dict
-from utils import init_weights
+from .cmli import infer_cmli_logits
+from typing import Dict, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
 
-# code for cmli logits heavily borrowed from x-clip -> https://github.com/lucidrains/x-clip
-# (https://github.com/lucidrains/x-clip/blob/main/x_clip/x_clip.py)
 
-def mask_eos(padding_masks):
+def mask_eos(padding_masks:torch.Tensor) -> torch.Tensor:
+    """Mask the last non-padding token in the input tensor, i.e. the end of sequence token.
+
+    Args:
+        padding_masks (torch.Tensor): The padding masks, of shape (batch_size, num_tokens).
+            Non-masked time steps are indicated by 0, masked time steps by 1.
+
+    Returns:
+        torch.Tensor: The padding masks with the last non-padding token masked.
+    """
+    # (padding_masks == 0).cumsum(dim=1) -> yields a tensor where the first occurence of 0 is 1, the second 2, etc.
+    # argmax(dim=1) -> yields the index of the last occurence of 0, which is the last non-padding token (the end of sequence token)
     last_zero_indices = (padding_masks == 0).cumsum(dim=1).argmax(dim=1)
     padding_masks[torch.arange(padding_masks.size(0)), last_zero_indices] = 1
     return padding_masks
@@ -24,10 +31,19 @@ def mask_eos(padding_masks):
 class CachedLabelContrastiveLoss(nn.Module):
     def __init__(
             self,
-            cache_labels=False,
-            rank=0,
-            world_size=1,
+            cache_labels:bool=False,
+            rank:int=0,
+            world_size:int=1,
     ):
+        """Supertype for any contrastive-based loss that (potentially) works in a distributed setting
+        and allows for caching of labels.
+
+        Args:
+            cache_labels (bool, optional): Whether to cache the labels for the loss of the subtype. Defaults to False.
+            rank (int, optional): The rank of the current worker/device. Defaults to 0.
+            world_size (int, optional): How many devices/workers there are. Defaults to 1, i.e. no distributed setting
+                and only one device.
+        """        
         super().__init__()
         self.cache_labels = cache_labels
         self.rank = rank
@@ -37,8 +53,18 @@ class CachedLabelContrastiveLoss(nn.Module):
         self.prev_num_logits = 0
         self.labels = {}
 
-    def get_labels(self, num_logits, device):
-        # calculated ground-truth and cache if enabled
+    def get_labels(self, num_logits:int, device:str) -> torch.Tensor:
+        """Gets the labels for the loss calculation. If caching is enabled, the labels are cached for the given device.
+
+        Args:
+            num_logits (int): How many classes there are. In the case of contrastive losses, this is the number of
+                negative samples plus the one positive sample. If e.g. batch size is 256 with 2 devices, then num_logits
+                would be 512.
+            device (str): On which device the labels should be generated.
+
+        Returns:
+            torch.Tensor: The labels for the loss calculation.
+        """
         if self.prev_num_logits != num_logits or device not in self.labels:
             labels = torch.arange(num_logits, device=device, dtype=torch.long)
             if self.world_size > 1:
@@ -53,7 +79,31 @@ class CachedLabelContrastiveLoss(nn.Module):
 
 # The implementation code is modified from open_clip (https://github.com/mlfoundations/open_clip.git)
 class ClipLoss(CachedLabelContrastiveLoss):
-    def forward(self, image_features, text_features, logit_scale, gather=True):
+    """
+    Implements the image-text contrastive loss from CLIP. Supports distributed training.
+    """    
+    def forward(
+        self,
+        image_features:torch.Tensor,
+        text_features:torch.Tensor,
+        logit_scale:torch.Tensor,
+        gather:bool=True
+    ) -> Dict[str, torch.Tensor]:
+        """Computes the image-text contrastive loss.
+        Features are expected to be normalized.
+
+        Args:
+            image_features (torch.Tensor): The image features, of shape (batch_size, feature_dim).
+            text_features (torch.Tensor): The text features, of shape (batch_size, feature_dim).
+            logit_scale (torch.Tensor): By which factor to scale the similarity scores. Only useful during training.
+                If no scaling is desired, set to 1.
+            gather (bool, optional): Whether to gather the features if in a distributed setting. Defaults to True.
+
+        Returns:
+            Dict[str, torch.Tensor]: A dictionary containing the total loss (key "loss"), the image loss (key "image_loss"),
+                the text loss (key "text_loss"), the logits per image (key "logits_per_image"),
+                the logits per text (key "logits_per_text"), and the targets/labels (key "targets").
+        """        
         device = image_features.device
         if self.world_size > 1 and gather:
             all_image_features, all_text_features = gather_features(
@@ -85,7 +135,34 @@ class ClipLoss(CachedLabelContrastiveLoss):
     
 
 class KDClipLoss(CachedLabelContrastiveLoss):
-    def forward(self, input_image, input_text, target, logit_scale, gather=True):
+    """
+    Computes the Contrastive Distillation loss between image features from the student and teacher (target) model,
+    and text features from the student and image features (target) from the teacher model. Supports distributed training.
+    """    
+    def forward(
+        self,
+        input_image:torch.Tensor,
+        input_text:torch.Tensor,
+        target:torch.Tensor,
+        logit_scale:torch.Tensor,
+        gather:bool=True
+    ) -> Dict[str, torch.Tensor]:
+        """Computes the loss.
+        Features are expected to be normalized.
+
+        Args:
+            input_image (torch.Tensor): The image features of the student, of shape (batch_size, feature_dim).
+            input_text (torch.Tensor): The text features of the student, of shape (batch_size, feature_dim).
+            target (torch.Tensor): The image features of the teacher, of shape (batch_size, feature_dim).
+            logit_scale (torch.Tensor): By which factor to scale the similarity scores. Only useful during training.
+                If no scaling is desired, set to 1.
+            gather (bool, optional): Whether to gather the features if in a distributed setting. Defaults to True.
+
+        Returns:
+            Dict[str, torch.Tensor]: A dictionary containing the total loss (key "loss"), the image loss (key "image_loss"),
+                the text loss (key "text_loss"), the logits per image (key "logits_per_image"),
+                the logits per text (key "logits_per_text"), and the targets/labels (key "targets").
+        """    
         device = input_image.device
         if self.world_size > 1 and gather:
             all_target = GatherLayer.apply(target)
@@ -99,8 +176,8 @@ class KDClipLoss(CachedLabelContrastiveLoss):
 
         labels = self.get_labels(logits_per_image.shape[0], device)
 
-        image_loss = F.cross_entropy(logits_per_image, labels)
-        text_loss = F.cross_entropy(logits_per_text, labels)
+        image_loss = F.cross_entropy(logits_per_image, labels) # image-to-image loss (i2i)
+        text_loss = F.cross_entropy(logits_per_text, labels) # text-to-image loss (t2i)
 
         total_loss = (image_loss + text_loss) / 2
         
@@ -117,12 +194,21 @@ class KDClipLoss(CachedLabelContrastiveLoss):
 
 class ClipMomentumMemoryBankLoss(nn.Module):
     def __init__(
-            self,
-            embed_size:int=768,
-            size:int=16384, # 2^14
-            half_precision:bool=False,
-            device:str='cuda',
-            world_size:int=1,): 
+        self,
+        embed_size:int=768,
+        size:int=16384, # 2^14
+        half_precision:bool=False,
+        device:str='cuda',
+        world_size:int=1
+    ):
+        """Implements the image-text contrastive loss with memory bank, maintained by a momentum encoder.
+
+        Args:
+            embed_size (int, optional): Dimension of the embeddings. Defaults to 768.
+            size (int, optional): Size of the memory bank. Defaults to 16384.
+            device (str, optional): Device on which the memory bank should be stored. Defaults to 'cuda'.
+            world_size (int, optional): How many devices there are. Defaults to 1.
+        """        
         super().__init__()
         self.world_size = world_size
         self.size = size
@@ -133,19 +219,25 @@ class ClipMomentumMemoryBankLoss(nn.Module):
         else:
             dtype = torch.float32
         
+        # init random memory bank for image representations
         imb_tmp = torch.rand((self.size, embed_size), dtype=dtype, device=device, requires_grad=False)
         imb_tmp = imb_tmp / imb_tmp.norm(dim=-1, keepdim=True)
-        self.register_buffer('image_memory_bank', imb_tmp)
+        self.register_buffer('image_memory_bank', imb_tmp) # not a parameter, so register as buffer
 
+        # init random memory bank for text representations
         tmb_tmp = torch.rand((self.size, embed_size), dtype=dtype, device=device, requires_grad=False)
         tmb_tmp = tmb_tmp / tmb_tmp.norm(dim=-1, keepdim=True)
-        self.register_buffer('text_memory_bank', tmb_tmp)
-        self.index_pointer = 0
+        self.register_buffer('text_memory_bank', tmb_tmp) # not a parameter, so register as buffer
+        self.index_pointer = 0 # we fill from the beginning
 
     def _update(self, img_emb:torch.Tensor, text_emb:torch.Tensor) -> None:
-        """
-        img_emb and text_emb must come from momentum encoder
-        """
+        """Updates the memory bank with new image and text embeddings. They should be normalized
+        and come from a momentum encoder.
+
+        Args:
+            img_emb (torch.Tensor): The image embeddings.
+            text_emb (torch.Tensor): The text embeddings.
+        """        
         if self.world_size > 1:
             img_emb, text_emb = gather_features(
                 img_emb,
@@ -153,14 +245,15 @@ class ClipMomentumMemoryBankLoss(nn.Module):
             )
 
         bsz = img_emb.shape[0]
-        assert bsz == text_emb.shape[0]
-        assert self.size % bsz == 0
+        assert bsz == text_emb.shape[0] # ensure image and text have the same batch size
+        assert self.size % bsz == 0 # ensure they fit
 
-        end_idx = self.index_pointer + bsz
+        end_idx = self.index_pointer + bsz # find the end index by advancing the pointer by the batch size
+        # detach to avoid backpropagation on older embeddings
         self.image_memory_bank[self.index_pointer:end_idx] = img_emb.detach()
         self.text_memory_bank[self.index_pointer:end_idx] = text_emb.detach()
 
-        self.index_pointer = end_idx % self.size
+        self.index_pointer = end_idx % self.size # advance the pointer and wrap around if necessary
     
     def forward(
             self,
@@ -184,17 +277,38 @@ class ClipMomentumMemoryBankLoss(nn.Module):
             image_features_m:torch.Tensor,
             text_features_m:torch.Tensor,
             logit_scale:torch.Tensor,) -> Dict[str, torch.Tensor]:
+        """Computes the image-text contrastive loss with memory bank.
+
+        Args:
+            image_features (torch.Tensor): The image features of the current batch, of shape (batch_size, feature_dim).
+            text_features (torch.Tensor): The text features of the current batch, of shape (batch_size, feature_dim).
+            image_features_m (torch.Tensor): The image features of the current batch, produced by the momentum encoder,
+                of shape (batch_size, feature_dim).
+            text_features_m (torch.Tensor): The text features of the current batch, produced by the momentum encoder,
+                of shape (batch_size, feature_dim).
+            logit_scale (torch.Tensor): The scaling factor for the logits. Only useful during training. If no scaling is desired,
+                set to 1.
+
+        Returns:
+            Dict[str, torch.Tensor]: A dictionary containing the total loss (key "loss"),
+                the logits per image (key "logits_per_image"), the logits per text (key "logits_per_text"),
+                and the targets/labels (key "targets").
+        """        
         device = image_features.device
         
+        # compute the contrastive loss between the current image embeddings with the current text embeddings of the momentum encoder
+        # AND the complete text memory bank
         logits_per_image = logit_scale * image_features @ torch.cat([text_features_m, self.text_memory_bank], dim=0).t()
+        # compute the contrastive loss between the current text embeddings with the current image embeddings of the momentum encoder
+        # AND the complete image memory bank
         logits_per_text = logit_scale * text_features @ torch.cat([image_features_m, self.image_memory_bank], dim=0).t()
 
         num_logits = logits_per_image.shape[0]
         labels = torch.arange(num_logits, device=device, dtype=torch.long)
 
         itc_loss = (
-            F.cross_entropy(logits_per_image.float(), labels)
-            + F.cross_entropy(logits_per_text.float(), labels)
+            F.cross_entropy(logits_per_image.float(), labels) # image-to-text loss
+            + F.cross_entropy(logits_per_text.float(), labels) # text-to-image loss
         ) / 2
 
         out_dict = {
@@ -208,32 +322,50 @@ class ClipMomentumMemoryBankLoss(nn.Module):
 
 class KDClipMomentumMemoryBankLoss(nn.Module):
     def __init__(
-            self,
-            embed_size:int=768,
-            size:int=16384, # 2^14
-            device:str='cuda',
-            world_size:int=1,): 
+        self,
+        embed_size:int=768,
+        size:int=16384, # 2^14
+        device:str='cuda',
+        world_size:int=1,
+    ):
+        """Implements the contrastive distillation loss with memory bank. Representations passed to the
+        "_update" amd "forward" methods should be normalized and come from a frozen teacher model.
+
+        Args:
+            embed_size (int, optional): Dimension of the embeddings. Defaults to 768.
+            size (int, optional): Size of the memory bank. Defaults to 16384.
+            device (str, optional): Device on which the memory bank should be stored. Defaults to 'cuda'.
+            world_size (int, optional): How many devices there are. Defaults to 1.
+        """
         super().__init__()
         self.world_size = world_size
         self.size = size
         
+        # init random memory bank, stores image embeddings of the teacher
         target_mb_ = torch.rand((self.size, embed_size), device=device, requires_grad=False)
         target_mb_ = target_mb_ / target_mb_.norm(dim=-1, keepdim=True)
-        self.register_buffer('target_memory_bank', target_mb_)
+        self.register_buffer('target_memory_bank', target_mb_) # not a parameter, so register as buffer
         self.index_pointer = 0
 
     def _update(self, target:torch.Tensor) -> None:
+        """Updates the memory bank with new (image) target embeddings.
+        They should be normalized and come from a frozen teacher model.
+
+        Args:
+            target (torch.Tensor): The target embeddings.
+        """        
         if self.world_size > 1:
             all_target = GatherLayer.apply(target)
             all_target = torch.cat(all_target)
 
         bsz = all_target.shape[0]
-        assert self.size % bsz == 0
+        assert self.size % bsz == 0 # ensure they fit
 
-        end_idx = self.index_pointer + bsz
+        end_idx = self.index_pointer + bsz # find the end index by advancing the pointer by the batch size
+        # detach to avoid backpropagation on older embeddings
         self.target_memory_bank[self.index_pointer:end_idx] = all_target.detach()
 
-        self.index_pointer = end_idx % self.size
+        self.index_pointer = end_idx % self.size # advance the pointer and wrap around if necessary
     
     def forward(
             self,
@@ -254,6 +386,23 @@ class KDClipMomentumMemoryBankLoss(nn.Module):
             input_text:torch.Tensor,
             target:torch.Tensor,
             logit_scale:torch.Tensor,) -> Dict[str, torch.Tensor]:
+        """Computes the contrastive distillation loss with memory bank.
+
+        Args:
+            input_image (torch.Tensor): The image features of the current batch, produced by the student model,
+                of shape (batch_size, feature_dim).
+            input_text (torch.Tensor): The text features of the current batch, produced by the student model,
+                of shape (batch_size, feature_dim).
+            target (torch.Tensor): The image features of the current batch, produced by the teacher model,
+                of shape (batch_size, feature_dim).
+            logit_scale (torch.Tensor): The scaling factor for the logits. Only useful during training. If no scaling is desired,
+                set to 1.
+
+        Returns:
+            Dict[str, torch.Tensor]: A dictionary containing the total loss (key "loss"), the image loss (key "image_loss"),
+                the text loss (key "text_loss"), the logits per image (key "logits_per_image"),
+                the logits per text (key "logits_per_text"), and the targets/labels (key "targets").
+        """        
         device = input_image.device
         
         all_target = torch.cat([target, self.target_memory_bank], dim=0).t()
@@ -262,8 +411,8 @@ class KDClipMomentumMemoryBankLoss(nn.Module):
 
         labels = torch.arange(logits_per_image.shape[0], device=device, dtype=torch.long)
 
-        image_loss = F.cross_entropy(logits_per_image, labels)
-        text_loss = F.cross_entropy(logits_per_text, labels)
+        image_loss = F.cross_entropy(logits_per_image, labels) # image-to-image loss (i2i)
+        text_loss = F.cross_entropy(logits_per_text, labels) # text-to-image loss (t2i)
 
         total_loss = (image_loss + text_loss) / 2
 
@@ -277,67 +426,29 @@ class KDClipMomentumMemoryBankLoss(nn.Module):
         }
         return out_dict
 
-# adapted from VLMo -> https://github.com/microsoft/unilm/blob/master/vlmo/vlmo/modules/objectives.py
-class ITMLoss(nn.Module):
-    def __init__(self, rank=0, world_size=1,):
-        super().__init__()
-        self.rank = rank
-        self.world_size = world_size
 
-    def forward(self,
-                image_features,
-                text_features,
-                cls_head,):
-        device = image_features.device
-        bsz = image_features.shape[0]
-        itm_labels = torch.cat([
-            torch.ones(bsz), 
-            torch.zeros(bsz), 
-            torch.zeros(bsz)]).to(device)
-
-        if self.world_size > 1:
-            image_features, text_features = gather_features(
-                image_features, text_features
-            )
-
-        scores = torch.ones(bsz, bsz)
-        scores.fill_diagonal_(0)
-
-        neg_text_idx = torch.multinomial(scores, 1).squeeze()
-        neg_image_idx = torch.multinomial(scores, 1).squeeze()
-
-        pos_image_text_pairs = image_features[:bsz] + text_features[:bsz]
-        neg_image_text_pairs = image_features[:bsz] + text_features[neg_text_idx]
-        neg_text_image_samples = image_features[neg_image_idx] + text_features[:bsz]
-
-        examples = torch.concat([pos_image_text_pairs, neg_image_text_pairs, neg_text_image_samples], dim=0)
-
-        logits = cls_head(examples)
-
-        out_dict = {
-            'loss': F.cross_entropy(logits, itm_labels.long()),
-            'logits': logits,
-            'targets': itm_labels,
-        }
-        return out_dict
-
-# following FILIP -> https://arxiv.org/pdf/2111.07783
 class CMLILoss(CachedLabelContrastiveLoss):
-    def __init__(self, cache_labels=False, rank=0, world_size=1):
-        super().__init__(cache_labels, rank, world_size)
+    """
+    Implements the Cross-Modal Late Interaction (CMLI) loss from FILIP: https://arxiv.org/pdf/2111.07783.
+    Supports distributed training.
+    """
+    def _gather(
+        self,
+        image_features:torch.Tensor,
+        text_features:torch.Tensor,
+        padding_mask:torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Garthers the features if in a distributed setting. Otherwise, returns the input features.
 
-    def get_labels(self, num_logits, device):
-        # calculated ground-truth and cache if enabled
-        if self.prev_num_logits != num_logits or device not in self.labels:
-            labels = torch.arange(num_logits, device=device, dtype=torch.long)
-            if self.cache_labels:
-                self.labels[device] = labels
-                self.prev_num_logits = num_logits
-        else:
-            labels = self.labels[device]
-        return labels
-     
-    def _gather(self, image_features, text_features, padding_mask):
+        Args:
+            image_features (torch.Tensor): The image features to gather.
+            text_features (torch.Tensor): The text features to gather.
+            padding_mask (torch.Tensor): The padding mask to gather.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple of the gathered image features (tuple[0]),
+                text features (tuple[1]), and padding mask (tuple[2]).
+        """        
         if self.world_size > 1:
             all_image_features, all_text_features, all_padding_mask = gather_features(
                 image_features, text_features, padding_mask
@@ -348,13 +459,35 @@ class CMLILoss(CachedLabelContrastiveLoss):
             all_padding_mask = padding_mask
         return all_image_features, all_text_features, all_padding_mask
     
-    def forward(self, image_features, text_features, padding_mask, logit_scale=1.0):
+    def forward(
+        self,
+        image_features:torch.Tensor,
+        text_features:torch.Tensor,
+        padding_mask:torch.Tensor,
+        logit_scale:torch.Tensor=torch.tensor(1.0),
+    ) -> Dict[str, torch.Tensor]:
+        """Computes the Cross-Modal Late Interaction (CMLI) loss.
 
+        Args:
+            image_features (torch.Tensor): The image features, of shape (batch_size, num_patches+1, feature_dim).
+            text_features (torch.Tensor): The text features, of shape (batch_size, num_tokens, feature_dim).
+            padding_mask (torch.Tensor): The padding mask for the text features, of shape (batch_size, num_tokens).
+            logit_scale (torch.Tensor, optional): The scaling factor for the logits. Only useful during training.
+                If no scaling is desired, set to "torch.tensor(1.0)"/"1". Defaults to torch.tensor(1.0).
+
+        Returns:
+            Dict[str, torch.Tensor]: A dictionary containing the total loss (key "loss"), the logits per image (key "logits_per_image"),
+                the logits per text (key "logits_per_text"), and the targets/labels (key "targets").
+        """        
+
+        # eos token is does not represent an actual token that is part of a sentence.
+        # we only want the similarity between actual (sub-)words and image patches
         padding_mask = mask_eos(padding_mask)
         image_features, text_features, padding_mask = self._gather(
             image_features, text_features, padding_mask
         )
 
+        # actually compute the similarity scores between all possible text-image pairs in the batch
         cmli_logits = infer_cmli_logits(
             text_features=text_features,
             image_features=image_features,
@@ -369,8 +502,8 @@ class CMLILoss(CachedLabelContrastiveLoss):
         labels = self.get_labels(logits_per_image.shape[0], logits_per_image.device)
 
         cmli_loss = (
-            F.cross_entropy(logits_per_image, labels) +
-            F.cross_entropy(logits_per_text, labels)
+            F.cross_entropy(logits_per_image, labels) + # image-to-text loss (i2t)
+            F.cross_entropy(logits_per_text, labels) # text-to-image loss (t2i)
             ) / 2
         
         out_dict = {
@@ -378,205 +511,5 @@ class CMLILoss(CachedLabelContrastiveLoss):
             'logits_per_image': logits_per_image,
             'logits_per_text': logits_per_text,
             'targets': labels,
-        }
-        return out_dict
-    
-class SparseCMLILoss(CMLILoss):
-    def __init__(self, cache_labels=False, rank=0, world_size=1, token_fraction=0.25):
-        super().__init__(cache_labels, rank, world_size)
-        self.token_fraction = token_fraction
-    
-    def gather_top_tokens(self, input, attn, padding_mask=None):
-        if padding_mask is not None:
-            attn = self._mask_eos(attn[:, 0], padding_mask)
-        else:
-            attn = attn[:, 0]
-        top_tokens = attn[:, 1:].topk(k=int(attn.shape[1]*self.token_fraction), dim=-1).indices
-        top_tokens += 1
-        top_tokens_index = top_tokens.unsqueeze(-1).expand(-1, -1, input.shape[-1])
-        return torch.gather(input, 1, top_tokens_index)
-    
-    def _mask_eos(self, cls_attn, padding_masks):
-        last_zero_indices = (padding_masks == 0).cumsum(dim=1).argmax(dim=1)
-        cls_attn[torch.arange(cls_attn.size(0)), last_zero_indices] = 0
-        return cls_attn
-    
-    def infer_cmli_logits(
-        self,
-        text_features:torch.Tensor,
-        image_features:torch.Tensor,
-        logit_scale:float|torch.Tensor=1.0,
-    ) -> torch.Tensor:
-    
-        text_features = text_features[:, 1:]
-        image_features = image_features[:, 1:]
-        sim = logit_scale * opt_einsum.contract('x t d, y i d -> x y t i', text_features, image_features)
-
-        text_to_image = einops.reduce(einops.reduce(sim, '... t i -> ... t', 'max'), '... i -> ...', 'mean')
-
-        image_to_text = einops.reduce(einops.reduce(sim, '... t i -> ... i', 'max'), '... i -> ...', 'mean')
-
-        return {"i2t": image_to_text, "t2i": text_to_image}
-    
-    def forward(self, image_features, text_features, padding_mask, image_attn, text_attn, logit_scale=1.0):
-        text_features, image_features = to_half(text_features, image_features)
-
-        image_features = self.gather_top_tokens(image_features, image_attn)
-        text_features = self.gather_top_tokens(text_features, text_attn, padding_mask)
-
-        image_features, text_features = self._gather(
-            image_features, text_features
-        )
-
-        cmli_logits = infer_cmli_logits(
-            text_features=text_features,
-            image_features=image_features,
-            logit_scale=logit_scale
-        )
-
-        logits_per_image = cmli_logits['i2t']
-        
-        logits_per_text = cmli_logits['t2i']
-
-        labels = self.get_labels(logits_per_image.shape[0], logits_per_image.device)
-
-        cmli_loss = (
-            F.cross_entropy(logits_per_image, labels) +
-            F.cross_entropy(logits_per_text, labels)
-            ) / 2
-        
-        out_dict = {
-            'loss': cmli_loss,
-            'logits_per_image': logits_per_image,
-            'logits_per_text': logits_per_text,
-            'targets': labels,
-        }
-        return out_dict
-
-class TargetCMLILoss(L.LightningModule):
-    def __init__(self, embed_dim, cmli_dim=None):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.cmli_dim = cmli_dim if cmli_dim is not None else embed_dim
-        self.down_proj = nn.Linear(embed_dim, self.cmli_dim)
-        self.down_proj.apply(init_weights)
-    
-    def forward(self, image, text, target, padding_mask):
-
-        text_tokens = text[:, 1:]
-        target_patches = target[:, 1:]
-        padding_mask = mask_eos(padding_mask)[:, 1:]
-
-        text_tokens_proj = self.down_proj(text_tokens)
-        target_patches_proj = self.down_proj(target_patches)
-        text_tokens_proj_norm = text_tokens_proj / text_tokens_proj.norm(dim=-1, keepdim=True)
-
-        target_patches_proj_norm = target_patches_proj / target_patches_proj.norm(dim=-1, keepdim=True)
-        
-        similarity = opt_einsum.contract('b i d, b j d -> b i j', text_tokens_proj_norm, target_patches_proj_norm)
-
-        similarity = similarity.max(dim=-1).values
-        similarity = similarity.masked_fill(padding_mask.bool(), max_neg_value(similarity.dtype)).max(dim=-1).values
-
-        kd_text_patch_loss = (1 - similarity).mean() # cosine embedding loss
-        
-        label = torch.ones(image.shape[0], device=image.device)
-        kd_text_cls_loss = F.cosine_embedding_loss(input1=text[:, 0].float(), input2=target[:, 0].float(),
-                                                   target=label)
-        
-        kd_text_loss = (kd_text_patch_loss + kd_text_cls_loss) / 2
-
-        kd_image_loss = F.cosine_embedding_loss(input1=image[:, 0].float(), input2=target[:, 0].float(),
-                                                target=label)
-
-        total_loss = (kd_text_loss + kd_image_loss) / 2
-
-        out_dict = {
-            'kd_loss': total_loss,
-            'kd_text_loss': kd_text_loss,
-            'kd_text_patch_loss': kd_text_patch_loss,
-            'kd_text_cls_loss': kd_text_cls_loss,
-            'kd_image_loss': kd_image_loss,
-        }
-        
-        return out_dict
-
-
-class CosineCMLILoss(nn.Module):
-    def __init__(self, align_margin=0.5):
-        super().__init__()
-        self.align_margin = align_margin
-    
-    def get_perm(self, B):
-        true_order = torch.arange(B)
-        perm = torch.randperm(B)
-
-        while (true_order==perm).any().item():
-            perm = torch.randperm(B)
-        return perm
-
-    def make_features(self, image_features, text_features, padding_mask):
-        B = text_features.shape[0]
-        perm = self.get_perm(B).to(image_features.device)
-
-        image_features = image_features.repeat(2, 1, 1)
-        text_features = torch.concat([text_features, text_features[perm]], dim=0)
-        padding_mask = torch.concat([padding_mask, padding_mask[perm]], dim=0)
-
-        target = torch.full((B*2, ), 1).to(text_features.device)
-        target[B:] = -1
-        return image_features, text_features, padding_mask, target
-    
-    def infer_cmli_logits(
-        self,
-        text_features:torch.Tensor,
-        image_features:torch.Tensor,
-        padding_mask:torch.Tensor,
-    ) -> Dict[str, torch.Tensor]:
-        text_features, image_features = to_half(text_features, image_features)
-        text_features, image_features, padding_mask = remove_cls(text_features, image_features, padding_mask)
-        
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        
-        sim = opt_einsum.contract('b i d, b j d -> b i j', text_features, image_features)
-
-        text_to_image = einops.reduce(sim, '... t i -> ... t', 'max')
-        text_to_image = masked_mean(text_to_image, padding_mask, dim = -1)
-
-        image_to_text_mask = einops.rearrange(padding_mask, 'b t -> b t 1')
-        masked_sim = sim.masked_fill(image_to_text_mask.bool(), max_neg_value(sim.dtype))
-        image_to_text = einops.reduce(einops.reduce(masked_sim, '... t i -> ... i', 'max'), '... i -> ...', 'mean')
-
-        return {"i2t": image_to_text, "t2i": text_to_image}
-    
-    def _loss(self, cosine_similarity, target):
-        pos_loss = 1 - cosine_similarity
-        neg_loss = torch.clamp(cosine_similarity - self.align_margin, min=0)
-        loss = torch.where(target == 1, pos_loss, neg_loss)
-        return loss.mean()
-
-    def forward(self, image_features, text_features, padding_mask):
-
-        image_features, text_features, padding_mask, target = self.make_features(
-            image_features=image_features,
-            text_features=text_features,
-            padding_mask=padding_mask,
-        )
-
-        padding_mask = mask_eos(padding_mask)
-
-        cmli_logits = self.infer_cmli_logits(
-            text_features=text_features,
-            image_features=image_features,
-            padding_mask=padding_mask,
-        )
-
-        cos_cmli_i2t = self._loss(cmli_logits['i2t'], target)
-        cos_cmli_t2i = self._loss(cmli_logits['t2i'], target)
-        total_loss = (cos_cmli_i2t + cos_cmli_t2i) / 2
-        
-        out_dict = {
-            'loss': total_loss
         }
         return out_dict

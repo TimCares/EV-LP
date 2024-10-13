@@ -31,6 +31,11 @@ def create_register_factory(registry:Dict[str, Callable]) -> Callable:
         return lambda func: add_to_registry(func, registry, name)
     return decorator
 
+# here are the actual functions that are used to model, configs, datasets and datamodules
+# they are usually used as decorators to register the respective object, e.g.:
+# @register_model("my_model")
+# class MyModel(nn.Module):
+#     ...
 register_model = create_register_factory(MODEL_REGISTRY)
 register_model_config = create_register_factory(MODEL_CONFIG_REGISTRY)
 register_dataset = create_register_factory(DATASET_REGISTRY)

@@ -1,3 +1,7 @@
+"""
+This script is used to convert a DeepSpeed zero checkpoint to a vanilla pytroch FP32 checkpoint.
+"""
+
 import os
 from lightning.pytorch.utilities.deepspeed import convert_zero_checkpoint_to_fp32_state_dict
 import argparse

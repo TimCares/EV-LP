@@ -1,3 +1,6 @@
+"""
+This script is the central entry point for training.
+"""
 import hydra
 from omegaconf import OmegaConf, open_dict, DictConfig
 import os

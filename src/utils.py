@@ -18,6 +18,9 @@ from enum import Enum, auto
 logger = logging.getLogger(__name__)
 
 class Modality(Enum):
+    """
+    Enum class to set the modalities of data.
+    """    
     AUDIO = auto()
     IMAGE = auto()
     TEXT = auto()
@@ -28,6 +31,15 @@ class Modality(Enum):
 
 def load_model(pretrained_model_cfg:DictConfig,
                model_state_dict:OrderedDict[str, torch.Tensor]) -> Data2VecMultiModel:
+    """Loads a pretrained Data2Vec2 model.
+
+    Args:
+        pretrained_model_cfg (DictConfig): OmegaConf config of the model, is merged with the dataclass for the Data2Vec2 model.
+        model_state_dict (OrderedDict[str, torch.Tensor]): Pytorch state dict of the (pretrained) model.
+
+    Returns:
+        Data2VecMultiModel: The initialized Data2Vec2 model.
+    """    
     
     pretrained_model_cfg = OmegaConf.merge(Data2VecMultiConfig(), pretrained_model_cfg)
 
@@ -39,12 +51,23 @@ def load_model(pretrained_model_cfg:DictConfig,
 
 
 def load_pretrained_d2v_model(state_dict_path:str, keep_decoder:bool=False, remove_dropout:bool=False) -> Data2VecMultiModel:
+    """Loads a pretrained Data2Vec2 model from a state dict.
+
+    Args:
+        state_dict_path (str): Path to the state dict.
+        keep_decoder (bool, optional): Whether to keep the decoder of the Data2Vec2 model. Defaults to False, meaning the decoder is removed.
+            Should be set to False if the model is used for inference only.
+        remove_dropout (bool, optional): If the dropout layers of the Data2Vec2 model should be set to p=0.0. Defaults to False.
+
+    Returns:
+        Data2VecMultiModel: The pretrained Data2Vec2 model.
+    """    
     model_meta_data = torch.load(state_dict_path)
     pretrained_model_cfg = OmegaConf.create(model_meta_data['cfg']['model'])
     if remove_dropout:
         for k in pretrained_model_cfg.keys():
             if 'drop' in k:
-                pretrained_model_cfg[k] = 0.0
+                pretrained_model_cfg[k] = 0.0 # set dropout to 0.0
     model = load_model(pretrained_model_cfg=pretrained_model_cfg, model_state_dict=model_meta_data['model'])
 
     # removes decoder, and all encoders with modality != supported modality
@@ -58,7 +81,18 @@ def pad_text_sequence(tokens:List[int],
                       pad_idx:int,
                       bos_idx:int,
                       eos_idx:int) -> Tuple[List[int], List[int]]:
-    
+    """Pads a text sequence with padding tokens, and adds the beginning and end of sequence tokens if not already present.
+
+    Args:
+        tokens (List[int]): The tokens of the text sequence, each token is an integer and one element in the list.
+        num_max_bpe_tokens (int): The length to which the sequence should be padded.
+        pad_idx (int): The padding token index.
+        bos_idx (int): The beginning of sequence token index.
+        eos_idx (int): The end of sequence token index.
+
+    Returns:
+        Tuple[List[int], List[int]]: A tuple of the padded text sequence (tuple[0]) and the padding mask (tuple[1]).
+    """    
     if len(tokens) > num_max_bpe_tokens - 2:
         tokens = tokens[:num_max_bpe_tokens - 2]
     tokens = ([bos_idx] if tokens[0]!=bos_idx else []) + tokens + ([eos_idx] if tokens[-1]!=eos_idx else [])
@@ -70,6 +104,21 @@ def pad_text_sequence(tokens:List[int],
 
 
 def prepare_output(out:List[torch.Tensor], modality:Optional[Modality]=None, norm:bool=True) -> torch.Tensor:
+    """Prepares the layer activations of a model for the Data2Vec loss.
+
+    Args:
+        out (List[torch.Tensor]): The layer activations of the model. Each element in the list is a tensor of shape (B, T, C),
+            and represents the activations of one layer.
+        modality (Optional[Modality], optional): The modality of the model that generated the activations. 
+            If it is Modality.IMAGE and not None, then layer norm will be applied after averaging along the layer dimension.
+            Defaults to None.
+        norm (bool, optional): Whether to apply instance norm along the time dimension. Instance norm is applied
+            on each layer seperately. Defaults to True.
+
+    Returns:
+        torch.Tensor: The average activations of the layers for each time step. Output shape is (B, T, C) and can be used for
+            the mse loss.
+    """    
     if norm:
         out = [
             F.instance_norm(tl.transpose(1, 2).float()).transpose(1, 2)
@@ -86,19 +135,37 @@ def prepare_output(out:List[torch.Tensor], modality:Optional[Modality]=None, nor
     return y
 
 def freeze_module(module:nn.Module) -> None:
+    """Puts a module in evaluation mode and freezes the parameters.
+
+    Args:
+        module (nn.Module): The module to freeze.
+    """    
     for param in module.parameters():
         param.requires_grad = False
     module.eval()
 
 def unfreeze_module(module:nn.Module) -> None:
+    """Puts a module in training mode and unfreezes the parameters.
+
+    Args:
+        module (nn.Module): The module to unfreeze.
+    """    
     for param in module.parameters():
         param.requires_grad = True
     module.train()
 
 def load_beit2_teacher(sd_path:str, **kwargs) -> VisionTransformerForMaskedImageModeling:
+    """Loads a pretrained BEiT2 model from a state dict.
+
+    Args:
+        sd_path (str): The path to the state dict.
+
+    Returns:
+        VisionTransformerForMaskedImageModeling: The loaded BEiT2 model.
+    """    
     sd = torch.load(sd_path)['model']
     for key in list(sd.keys()):
-        if "cls_pt_layers" in key:
+        if "cls_pt_layers" in key: # remove the patch aggregation layers, only needed for pretraining
             del sd[key]
 
     beit2 = VisionTransformerForMaskedImageModeling(
@@ -115,7 +182,12 @@ def load_beit2_teacher(sd_path:str, **kwargs) -> VisionTransformerForMaskedImage
 def trunc_normal_(tensor, mean=0., std=1.):
     __call_trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
 
-def init_weights(m):
+def init_weights(m:nn.Module) -> None:
+    """Initializes the weights of a model in place.
+
+    Args:
+        m (nn.Module): The model to initialize.
+    """    
     if isinstance(m, nn.Linear):
         trunc_normal_(m.weight, std=.02)
         if isinstance(m, nn.Linear) and m.bias is not None:
