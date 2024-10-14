@@ -1,7 +1,7 @@
 from .base_datasets import (
     BaseDataset,
     ImageDataset,
-    BaseImageText,
+    ImageTextDataset,
 )
 
 from .unimodal_datasets import (
@@ -11,7 +11,7 @@ from .unimodal_datasets import (
 
 from .multimodal_datasets import (
     COCOCaptions, 
-    Flickr30Dataset,
+    Flickr30K,
     ConceptualCaptions,
 )
 

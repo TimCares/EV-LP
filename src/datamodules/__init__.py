@@ -8,7 +8,7 @@ from .unimodal_datamodules import (
 from .multimodal_datamodules import (
     COCOCaptionsDataModule,
     ConceptualCaptionsDataModule,
-    Flickr30DataModule,
+    Flickr30KDataModule,
 )
 
 from .dummy import DummyDataModule

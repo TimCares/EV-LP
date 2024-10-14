@@ -1,3 +1,8 @@
+"""
+This script is used to generate a single text file from all available tar archives of the OpenWebText dataset
+from HuggingFace: https://huggingface.co/datasets/Skylion007/openwebtext
+The file can then be used with the MaskedLMDataset for training/distilling a language model.
+"""
 import os
 import argparse
 import glob

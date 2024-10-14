@@ -1,3 +1,6 @@
+"""
+This module defines a datamodule that combines multiple datamodules.
+"""
 from typing import List, Dict, Union, Iterable
 import torch
 import numpy as np

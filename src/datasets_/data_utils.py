@@ -8,6 +8,7 @@ from typing import Tuple, List, Dict, Union, Iterable
 import PIL
 from timm.data.transforms import RandomResizedCropAndInterpolation
 import numpy as np
+import random
 
 logger = logging.getLogger(__name__)
 

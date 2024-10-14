@@ -1,4 +1,10 @@
+"""
+This module contains the implementation of the COCO Captions, Flickr30k, and Conceptual Captions 3M/12M datasets.
+"""
 import os
+from typing import Dict, Union, Any, List
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from torch import nn
 import json
 import pandas as pd
 from datasets_.data_utils import write_data_into_jsonl
@@ -7,42 +13,44 @@ import os
 import json
 import zipfile
 from torchvision.datasets.utils import download_url
-from .base_datasets import BaseImageText
+from .base_datasets import ImageTextDataset
 from registries import register_dataset
 
 @register_dataset(name='COCOCaptions')
-class COCOCaptions(BaseImageText):
+class COCOCaptions(ImageTextDataset):
     def __init__(
         self,
-        data_path,
-        split,
-        num_max_bpe_tokens=64,
-        task="captioning", # TODO
-        color_jitter=None,
-        beit_transforms=False,
-        crop_scale=(0.6, 1.0),
-        text_token_mask_prob=0.0,
+        data_path:os.PathLike,
+        split:str,
+        transforms:Dict[str, nn.Module]=None,
+        tokenizer:Union[PreTrainedTokenizer, PreTrainedTokenizerFast]=None,
+        max_seq_len:int=64,
+        text_token_mask_prob:float=0.0,
     ):
-        assert task in ["captioning", "retrieval"]
-        self.task = task
-        if self.task == "retrieval": # yields no augmentation, as retrieval is zero-shot (testing)
-            color_jitter = None
-            beit_transforms = False
-            crop_scale = (1.0, 1.0)
+        """The COCO Captions dataset.
+
+        Args:
+            data_path (os.PathLike): The path where the data is stored.
+            split (str): The split of the data. One of 'train', 'val', or 'test'.
+            transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to image data.
+                If None, no augmentation will be applied. Defaults to None.
+            tokenizer (Union[PreTrainedTokenizer, PreTrainedTokenizerFast], optional): A tokenizer class that implements
+                the Huggingface tokenizer API. Used to tokenize text data.
+                Defaults to None.
+                If None, then the BERT base uncased tokenizer will be used by default:
+                BertTokenizer.from_pretrained("bert-base-uncased")
+            max_seq_len (int, optional): The maximum sequence length of the tokenized text data. Defaults to 64.
+            text_token_mask_prob (float, optional): The probability of masking a token in the captions. Defaults to 0.0, so no masking is done.
+        """        
         super().__init__(
             data_path=data_path,
             split=split,
-            num_max_bpe_tokens=num_max_bpe_tokens,
-            color_jitter=color_jitter,
-            beit_transforms=beit_transforms,
-            crop_scale=crop_scale,
-            text_token_mask_prob=text_token_mask_prob
+            transforms=transforms,
+            tokenizer=tokenizer,
+            max_seq_len=max_seq_len,
+            text_token_mask_prob=text_token_mask_prob,
         )
-
-        self.path_to_data = os.path.join(self.data_path, "coco")        
-
-        os.makedirs(self.path_to_data, exist_ok=True)
-        if self.index_exists(dataset_path=self.path_to_data):
+        if self.index_exists():
             return
 
         data_already_downloaded = os.path.exists(os.path.join(self.path_to_data, "train2014")) and \
@@ -66,12 +74,19 @@ class COCOCaptions(BaseImageText):
         else:
             self.log("COCO dataset already downloaded!")
 
-        self._make_coco_karpathy_dataset_index()
+        self.create_index()
 
     def get_index_files(self):
-        return (f"coco_{self.task}.{self.split}.jsonl", )
+        return (f"coco.{self.split}.jsonl", )
     
-    def _make_coco_karpathy_dataset_index(self):
+    @property
+    def data_dir(self) -> str:
+        """
+        Name of the directory in self.data_path where the data is stored.
+        """        
+        raise "coco"
+    
+    def create_index(self):
         if self.split == "train":
             karpathy_split = ("train", "restval")
         elif self.split == "val":
@@ -85,7 +100,6 @@ class COCOCaptions(BaseImageText):
         items = []
         image_counter = set()
         self.log("Read %s" % coco_karpathy_split_json_file)
-        self.log("Task is: %s" % self.task)
         with open(coco_karpathy_split_json_file, mode="r", encoding="utf-8") as reader:
             data = json.loads(reader.read())
             for item in data["images"]:
@@ -99,42 +113,61 @@ class COCOCaptions(BaseImageText):
         index_file = os.path.join(self.path_to_data, self.get_index_files()[0])
         write_data_into_jsonl(items, index_file)
 
-    def _encode_all(self, item, image_path):
+    def _encode_all(self, item:Dict[str, Any], image_path:os.PathLike) -> List[Dict[str, Any]]:
+        """Creates one training example for each caption (usually 5) of one image.
+
+        Args:
+            item (Dict[str, Any]): The item representing one image and its captions.
+            image_path (os.PathLike): The path to the image.
+
+        Returns:
+            List[Dict[str, Any]]: The training examples for the image.
+        """        
         return [
             {
-                "image_path": image_path,
+                "image_path": image_path, # image is the same for all captions of one image
                 "text": self.tokenizer.tokenize(sent["raw"]),
-                "id": item["cocoid"],
+                "id": item["cocoid"], # image is always the same for all captions, and therefore the id is the same
             }
             for sent in item["sentences"]
         ]
 
 
-@register_dataset(name='Flickr30k')
-class Flickr30Dataset(BaseImageText):
-    def __init__(self,
-                 data_path,
-                 split,
-                 num_max_bpe_tokens,
-                 color_jitter,
-                 beit_transforms,
-                 crop_scale,
-                 text_token_mask_prob=0.0
-                 ):
+@register_dataset(name='Flickr30K')
+class Flickr30K(ImageTextDataset):
+    def __init__(
+        self,
+        data_path:os.PathLike,
+        split:str,
+        transforms:Dict[str, nn.Module]=None,
+        tokenizer:Union[PreTrainedTokenizer, PreTrainedTokenizerFast]=None,
+        max_seq_len:int=64,
+        text_token_mask_prob:float=0.0,
+    ):
+        """The COCO Captions dataset.
+
+        Args:
+            data_path (os.PathLike): The path where the data is stored.
+            split (str): The split of the data. One of 'train', 'val', or 'test'.
+            transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to image data.
+                If None, no augmentation will be applied. Defaults to None.
+            tokenizer (Union[PreTrainedTokenizer, PreTrainedTokenizerFast], optional): A tokenizer class that implements
+                the Huggingface tokenizer API. Used to tokenize text data.
+                Defaults to None.
+                If None, then the BERT base uncased tokenizer will be used by default:
+                BertTokenizer.from_pretrained("bert-base-uncased")
+            max_seq_len (int, optional): The maximum sequence length of the tokenized text data. Defaults to 64.
+            text_token_mask_prob (float, optional): The probability of masking a token in the captions. Defaults to 0.0, so no masking is done.
+        """        
         super().__init__(
             data_path=data_path,
             split=split,
-            num_max_bpe_tokens=num_max_bpe_tokens,
-            color_jitter=color_jitter,
-            beit_transforms=beit_transforms,
-            crop_scale=crop_scale,
-            text_token_mask_prob=text_token_mask_prob
+            transforms=transforms,
+            tokenizer=tokenizer,
+            max_seq_len=max_seq_len,
+            text_token_mask_prob=text_token_mask_prob,
         )
-
-        self.path_to_data = os.path.join(self.data_path, "flickr30k")
-
-        os.makedirs(self.path_to_data, exist_ok=True)
-        if self.index_exists(dataset_path=self.path_to_data):
+        if self.index_exists():
             return
         
         url="https://cs.stanford.edu/people/karpathy/deepimagesent/caption_datasets.zip"
@@ -146,24 +179,19 @@ class Flickr30Dataset(BaseImageText):
         os.remove(os.path.join(self.path_to_data, 'dataset_flickr8k.json'))
         os.remove(os.path.join(self.path_to_data, 'dataset_coco.json'))
         
-        self.make_flickr30k_dataset_index()
+        self.create_index()
 
     def get_index_files(self):
-        if self.split == "train":
-            return (f"flickr30k.train.jsonl", )
-        elif self.split == "val":
-            return (f"flickr30k.val.jsonl", )
-        elif self.split == "test":
-            return (f"flickr30k.test.jsonl", )
-        else:
-            raise RuntimeError("split %s is not found!" % self.split)
+        return (f"flickr30k.{self.split}.jsonl", )
         
-    def __getitem__(self, index: int):
-        data = super().__getitem__(index)
-        data["id"] = self.items[index]["id"]
-        return data
+    @property
+    def data_dir(self) -> str:
+        """
+        Name of the directory in self.data_path where the data is stored.
+        """        
+        raise "flickr30k"
 
-    def make_flickr30k_dataset_index(self):
+    def create_index(self):
 
         with open(os.path.join(self.path_to_data, "dataset_flickr30k.json"), "r") as reader:
             captions = json.loads(reader.read())
@@ -194,42 +222,61 @@ class Flickr30Dataset(BaseImageText):
         self.log(f"{len(all_images)} images and {len(index)} image-text pairs!")
         write_data_into_jsonl(index, os.path.join(self.path_to_data, f"flickr30k.{self.split}.jsonl"))
 
-class ConceptualCaptions(BaseImageText):
+class ConceptualCaptions(ImageTextDataset):
     def __init__(
         self,
-        type,
-        data_path,
-        split,
-        num_max_bpe_tokens=64,
-        color_jitter=None,
-        beit_transforms=False,
-        crop_scale=(0.6, 1.0),
-        text_token_mask_prob=0.0,
+        data_path:os.PathLike,
+        split:str,
+        transforms:Dict[str, nn.Module]=None,
+        tokenizer:Union[PreTrainedTokenizer, PreTrainedTokenizerFast]=None,
+        max_seq_len:int=64,
+        text_token_mask_prob:float=0.0,
+        type:str="cc3m",
     ):
+        """The COCO Captions dataset.
+
+        Args:
+            data_path (os.PathLike): The path where the data is stored.
+            split (str): The split of the data. One of 'train', 'val', or 'test'.
+            transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to image data.
+                If None, no augmentation will be applied. Defaults to None.
+            tokenizer (Union[PreTrainedTokenizer, PreTrainedTokenizerFast], optional): A tokenizer class that implements
+                the Huggingface tokenizer API. Used to tokenize text data.
+                Defaults to None.
+                If None, then the BERT base uncased tokenizer will be used by default:
+                BertTokenizer.from_pretrained("bert-base-uncased")
+            max_seq_len (int, optional): The maximum sequence length of the tokenized text data. Defaults to 64.
+            text_token_mask_prob (float, optional): The probability of masking a token in the captions. Defaults to 0.0, so no masking is done.
+            type (str, optional): The type of the Conceptual Captions dataset. One of 'cc3m' or 'cc12m'. Defaults to 'cc3m'.
+        """        
         super().__init__(
             data_path=data_path,
             split=split,
-            num_max_bpe_tokens=num_max_bpe_tokens,
-            color_jitter=color_jitter,
-            beit_transforms=beit_transforms,
-            crop_scale=crop_scale,
-            text_token_mask_prob=text_token_mask_prob
+            transforms=transforms,
+            tokenizer=tokenizer,
+            max_seq_len=max_seq_len,
+            text_token_mask_prob=text_token_mask_prob,
         )
-        self.type = type
         assert type in ["cc3m", "cc12m"]
-        self.path_to_data = os.path.join(self.data_path, f"conceptual_captions_{self.type[2:]}")
-        self.img_path = os.path.join(self.path_to_data, "images")
-        os.makedirs(self.path_to_data, exist_ok=True)
-        os.makedirs(self.img_path, exist_ok=True)
-        if self.index_exists(dataset_path=self.path_to_data):
-            return
-        
-        self.make_conceptual_captions_dataset_index()
+        self.type = type
+
+        if not self.index_exists():
+            self.make_conceptual_captions_dataset_index()
 
     def get_index_files(self):
         return (f"conceptual_captions_{self.type[2:]}.jsonl", ) # only for pretraining, so no splits
+    
+    @property
+    def data_dir(self) -> str:
+        """
+        Name of the directory in self.data_path where the data is stored.
+        """        
+        raise f"conceptual_captions_{self.type[2:]}"
 
     def make_conceptual_captions_dataset_index(self):
+        img_path = os.path.join(self.path_to_data, "images")
+        assert os.path.exists(img_path), f"Images not found at {img_path}!"
+
         items = []
         if self.type == "cc3m":
             index_name = "Train-GCC-training.tsv"
@@ -241,10 +288,10 @@ class ConceptualCaptions(BaseImageText):
         index = pd.read_csv(index_path, sep='\t', header=None).reset_index(drop=True)
         index.columns = col_names
         
-        for img in tqdm(os.listdir(self.img_path), desc="Making index"):
+        for img in tqdm(os.listdir(img_path), desc="Making index"):
             idx = int(os.path.splitext(img)[0])
             items.append({
-                'image_path': os.path.join(self.img_path, img),
+                'image_path': os.path.join(img_path, img),
                 'text': self.tokenizer.tokenize(index.at[idx, 'caption'].strip()),
                 'id': idx,
             })
