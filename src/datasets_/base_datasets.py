@@ -218,7 +218,7 @@ class TextMixin:
         # that is why we append as many 0 as needed until the maximum sequence length is reached
         mask_labels = [0] + mask_labels + [0] * (self.max_seq_len - len(mask_labels) - 1)
 
-        language_tokens, padding_mask = pad_text_sequence(tokens=tokens, num_max_bpe_tokens=self.max_seq_len,
+        language_tokens, padding_mask = pad_text_sequence(tokens=tokens, max_seq_len=self.max_seq_len,
                                                           pad_idx=self.tokenizer.pad_token_id, bos_idx=self.tokenizer.cls_token_id,
                                                           eos_idx=self.tokenizer.sep_token_id)
         return {

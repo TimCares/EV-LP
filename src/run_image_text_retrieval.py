@@ -230,12 +230,12 @@ def main(cfg: DictConfig) -> None:
 
     datamodules = []
 
-    shared_args = cfg.data.shared_args
+    common_args = cfg.data.common
 
     for datamodule_key in cfg.data.datamodules.keys(): # COCO and Flickr30K
         dataset_args = cfg.data.datamodules[datamodule_key]
         with open_dict(dataset_args):
-            dataset_args.update(shared_args)
+            dataset_args.update(common_args)
         dm = DATAMODULE_REGISTRY[datamodule_key](**dataset_args)
         datamodules.append((datamodule_key, dm))
     

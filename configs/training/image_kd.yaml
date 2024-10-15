@@ -38,9 +38,16 @@ data:
   datamodules:
     ImageNet:
       data_path: ${data_path}
-      pretraining: True
-      beit_transforms: False
-      crop_scale: [0.08, 1.0]
+      train_transforms:
+        - _name: "" # base transform, key for image data in dataset will just be "image", "<_name>_image" otherwise
+          pretraining: True
+          size: 224
+          color_jitter: # None
+          crop_scale: [0.08, 1.0]
+      eval_transforms:
+        - _name: "" # base transform, key for image data in dataset will just be "image", "<_name>_image" otherwise
+          pretraining: True
+          size: 224
 
 checkpoint:
   common:

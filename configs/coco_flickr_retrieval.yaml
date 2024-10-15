@@ -5,23 +5,22 @@ model_version:
 model_name:
 
 data:
-  shared_args:
+  common:
     batch_size: 256
     num_workers: 4
     shuffle: False
     drop_last: False
 
     data_path: /workspace
-    num_max_bpe_tokens: 64
+    max_seq_len: 64
+
+    eval_transforms:
+      - _name: "" # base transform, key for image data in dataset will just be "image", "<_name>_image" otherwise
+        pretraining: True
+        size: 224
+    
+    text_token_mask_prob: 0.0
 
   datamodules:
-    COCOCaptions:
-      task: captioning
-      color_jitter: # None
-      beit_transforms: False
-      crop_scale: [1.0, 1.0]
-
-    Flickr30k:
-      color_jitter: # None
-      beit_transforms: False
-      crop_scale: [1.0, 1.0]
+    COCOCaptions: {}
+    Flickr30K: {}

@@ -69,6 +69,7 @@ def get_transform(
         return get_transform_pretraining(
             train=train,
             size=size,
+            color_jitter=color_jitter,
             crop_scale=crop_scale
         )
     else:
@@ -193,6 +194,29 @@ def get_transform_finetuning(
         transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)
     ]
     return transforms.Compose(t)
+
+def create_transforms_from_config(cfg_list:List[Dict[str, Union[str, int, float]]], train:bool=True) -> List[transforms.Compose]:
+    """Creates a set of data transformations/augmentations from a list of transform configurations.
+    Allowed keys are "_name" (str, mandatory), and any other key that is a valid argument for the function
+    `get_transform` of this module. 
+    
+    Args:
+        cfg_list (List[Dict[str, Union[str, int, float]]]): The list of transforms to create. Each dictionary
+            contains the name (key "_name") and parameters for a single transform pipeline (Compose).
+        train (bool, optional): Whether the transformations should be used on the training set. Defaults to True.
+
+    Returns:
+        List[transforms.Compose]: The named of transformations given by the configuration list. One key wiht a
+            Compose object per item in cfg_list.
+    """
+    transforms_list:Dict[str, transforms.Compose] = []
+    for cfg in cfg_list:
+        assert "_name" in cfg, "Each transform configuration must have a '_name' key."
+        assert isinstance(cfg["_name"], str), "The '_name' key must be a string."
+        name = cfg.pop("_name")
+        cfg["train"] = train
+        transforms_list[name] = get_transform(**cfg)
+    return transforms_list
 
 def collater(samples:List[Dict[str, Union[torch.Tensor, np.ndarray, Iterable]]]) -> Dict[str, torch.Tensor]:
     """Batches a set of items, where each item is a dictionary of tensors, numpy arrays, or iterable objects.

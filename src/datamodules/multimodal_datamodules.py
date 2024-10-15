@@ -26,10 +26,12 @@ class COCOCaptionsDataModule(BaseDataModule):
 
         Args:
             data_path (os.PathLike): The path where the data is stored.
-            train_transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to training image data.
-                If None, no augmentation will be applied. Defaults to None.
+            train_transforms (Dict[str, nn.Module], optional): PyTorch transforms to apply to training image data.
+                Training dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied.
             eval_transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to validation/test image data.
-                If None, no augmentation will be applied. Defaults to None.
+                Val/test dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied.
             tokenizer (Union[PreTrainedTokenizer, PreTrainedTokenizerFast], optional): A tokenizer class that implements
                 the Huggingface tokenizer API. Used to tokenize text data.
                 Defaults to None.
@@ -85,7 +87,8 @@ class COCOCaptionsDataModule(BaseDataModule):
 class ConceptualCaptionsDataModule(BaseDataModule):
     def __init__(self,
         data_path:os.PathLike,
-        transforms:Dict[str, nn.Module]=None,
+        train_transforms:Dict[str, nn.Module]=None,
+        eval_transforms:Dict[str, nn.Module]=None,
         tokenizer:Union[PreTrainedTokenizer, PreTrainedTokenizerFast]=None,
         max_seq_len:int=64,
         text_token_mask_prob:float=0.0,
@@ -97,6 +100,13 @@ class ConceptualCaptionsDataModule(BaseDataModule):
 
         Args:
             data_path (os.PathLike): The path where the data is stored.
+            train_transforms (Dict[str, nn.Module], optional): PyTorch transforms to apply to training image data.
+                Training dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied.
+            eval_transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to validation/test image data.
+                Val/test dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied. This field is only kept for consistency with other data modules,
+                this ConceptualCaptionsDataModule only supports the 'train' split!
             transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to training image data.
                 If None, no augmentation will be applied. Defaults to None.
             tokenizer (Union[PreTrainedTokenizer, PreTrainedTokenizerFast], optional): A tokenizer class that implements
@@ -111,7 +121,7 @@ class ConceptualCaptionsDataModule(BaseDataModule):
             **kwargs (Dict[str, Any): Additional keyword arguments for the BaseDataModule. Usually arguments for the DataLoader.
         """     
         super().__init__(data_path, *args, **kwargs)
-        self.transforms = transforms
+        self.train_transforms = train_transforms
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.text_token_mask_prob = text_token_mask_prob
@@ -130,7 +140,7 @@ class ConceptualCaptionsDataModule(BaseDataModule):
             type=self.type,
             data_path=self.data_path,
             split='train',
-            transforms=self.transforms,
+            transforms=self.train_transforms,
             tokenizer=self.tokenizer,
             max_seq_len=self.max_seq_len,
             text_token_mask_prob=self.text_token_mask_prob,
@@ -153,10 +163,12 @@ class Flickr30KDataModule(BaseDataModule):
 
         Args:
             data_path (os.PathLike): The path where the data is stored.
-            train_transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to training image data.
-                If None, no augmentation will be applied. Defaults to None.
+            train_transforms (Dict[str, nn.Module], optional): PyTorch transforms to apply to training image data.
+                Training dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied.
             eval_transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to validation/test image data.
-                If None, no augmentation will be applied. Defaults to None.
+                Val/test dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied.
             tokenizer (Union[PreTrainedTokenizer, PreTrainedTokenizerFast], optional): A tokenizer class that implements
                 the Huggingface tokenizer API. Used to tokenize text data.
                 Defaults to None.

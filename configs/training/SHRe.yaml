@@ -16,7 +16,7 @@ model_name: SHRe
 
 load_checkpoint:
 
-nlp_context_length: 64 # inspired by BEiT3
+max_text_seq_len: 64 # inspired by BEiT3
 
 model:
   embed_dim: 768
@@ -31,15 +31,23 @@ data:
 
   common: # keys used for all datasets
     data_path: ${data_path}
-    num_max_bpe_tokens: ${nlp_context_length}
-    color_jitter: # None
-    beit_transforms: False
-    crop_scale: [0.9, 1.0]
+    max_seq_len: ${max_text_seq_len}
+
+    train_transforms:
+      - _name: "" # base transform, key for image data in dataset will just be "image", "<_name>_image" otherwise
+        pretraining: True
+        size: 224
+        color_jitter: # None
+        crop_scale: [0.9, 1.0]
+    eval_transforms:
+      - _name: "" # base transform, key for image data in dataset will just be "image", "<_name>_image" otherwise
+        pretraining: True
+        size: 224
+    
     text_token_mask_prob: 0.0
 
-  datamodules:
-    COCOCaptions:
-      task: captioning
+  datamodules: # all datamodules do not have args that are specific to them, that is why we just provide an empty dict ("{}")
+    COCOCaptions: {}
 
     ConceptualCaptions3m: {}
 

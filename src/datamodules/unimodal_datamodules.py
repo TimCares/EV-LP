@@ -284,11 +284,13 @@ class ImageNetDataModule(BaseDataModule):
 
         Args:
             data_path (os.PathLike): The path where the data is stored.
-            train_transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to training image data.
-                If None, no augmentation will be applied. Defaults to None.
+            train_transforms (Dict[str, nn.Module], optional): PyTorch transforms to apply to training image data.
+                Training dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied.
             eval_transforms (Dict[str, nn.Module], optional): A list of named PyTorch transforms to apply to validation/test image data.
-                If None, no augmentation will be applied. Defaults to None.
-        """        
+                Val/test dataset will yield as many items as there are transforms.
+                If None, no augmentation will be applied.
+        """
         super().__init__(data_path, *args, **kwargs)
         self.train_transforms = train_transforms
         self.eval_transforms = eval_transforms

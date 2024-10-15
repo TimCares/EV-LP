@@ -77,7 +77,7 @@ def load_pretrained_d2v_model(state_dict_path:str, keep_decoder:bool=False, remo
 
 
 def pad_text_sequence(tokens:List[int],
-                      num_max_bpe_tokens:int,
+                      max_seq_len:int,
                       pad_idx:int,
                       bos_idx:int,
                       eos_idx:int) -> Tuple[List[int], List[int]]:
@@ -85,7 +85,7 @@ def pad_text_sequence(tokens:List[int],
 
     Args:
         tokens (List[int]): The tokens of the text sequence, each token is an integer and one element in the list.
-        num_max_bpe_tokens (int): The length to which the sequence should be padded.
+        max_seq_len (int): The length to which the sequence should be padded.
         pad_idx (int): The padding token index.
         bos_idx (int): The beginning of sequence token index.
         eos_idx (int): The end of sequence token index.
@@ -93,12 +93,12 @@ def pad_text_sequence(tokens:List[int],
     Returns:
         Tuple[List[int], List[int]]: A tuple of the padded text sequence (tuple[0]) and the padding mask (tuple[1]).
     """    
-    if len(tokens) > num_max_bpe_tokens - 2:
-        tokens = tokens[:num_max_bpe_tokens - 2]
+    if len(tokens) > max_seq_len - 2:
+        tokens = tokens[:max_seq_len - 2]
     tokens = ([bos_idx] if tokens[0]!=bos_idx else []) + tokens + ([eos_idx] if tokens[-1]!=eos_idx else [])
     num_tokens = len(tokens)
-    padding_mask = [0] * num_tokens + [1] * (num_max_bpe_tokens - num_tokens)
-    language_tokens = tokens + [pad_idx] * (num_max_bpe_tokens - num_tokens)
+    padding_mask = [0] * num_tokens + [1] * (max_seq_len - num_tokens)
+    language_tokens = tokens + [pad_idx] * (max_seq_len - num_tokens)
 
     return language_tokens, padding_mask
 

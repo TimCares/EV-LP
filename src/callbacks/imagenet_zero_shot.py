@@ -45,7 +45,7 @@ def _zero_shot_classifier(pl_module:LightningModule, device:str='cuda') -> torch
                  for template in openai_imagenet_template]
         padding_masks = []
         for i in range(len(texts)):
-            language_tokens, padding_mask = pad_text_sequence(tokens=texts[i], num_max_bpe_tokens=MAX_SEQ_LEN,
+            language_tokens, padding_mask = pad_text_sequence(tokens=texts[i], max_seq_len=MAX_SEQ_LEN,
                                                               pad_idx=tokenizer.pad_token_id, bos_idx=tokenizer.cls_token_id,
                                                               eos_idx=tokenizer.sep_token_id,)
             

@@ -50,10 +50,19 @@ data:
   datamodules:
     CIFAR-10:
       data_path: ${data_path}
-      aa: rand-m9-mstd0.5-inc1
-      reprob: 0.25
-      remode: pixel
-      recount: 1
+      train_transforms:
+        - _name: ""
+          pretraining: False
+          size: 224
+          color_jitter: 0.4
+          aa: rand-m9-mstd0.5-inc1
+          reprob: 0.25
+          remode: pixel
+          recount: 1
+      eval_transforms:
+        - _name: ""
+          size: 224
+          pretraining: False
 
 optimizer:
   lr: 0.001

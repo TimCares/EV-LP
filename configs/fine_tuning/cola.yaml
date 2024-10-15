@@ -39,7 +39,7 @@ data:
   datamodules:
     cola_glue:
       data_path: ${data_path}
-      num_max_bpe_tokens: 256
+      max_seq_len: 256
 
 optimizer:
   lr: 1e-5
