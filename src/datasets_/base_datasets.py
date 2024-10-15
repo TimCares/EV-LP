@@ -219,8 +219,8 @@ class TextMixin:
         mask_labels = [0] + mask_labels + [0] * (self.max_seq_len - len(mask_labels) - 1)
 
         language_tokens, padding_mask = pad_text_sequence(tokens=tokens, max_seq_len=self.max_seq_len,
-                                                          pad_idx=self.tokenizer.pad_token_id, bos_idx=self.tokenizer.cls_token_id,
-                                                          eos_idx=self.tokenizer.sep_token_id)
+                                                          pad_token_id=self.tokenizer.pad_token_id, cls_token_id=self.tokenizer.cls_token_id,
+                                                          sep_token_id=self.tokenizer.sep_token_id)
         return {
             "text": language_tokens,
             "padding_mask": padding_mask,

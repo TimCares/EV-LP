@@ -78,27 +78,27 @@ def load_pretrained_d2v_model(state_dict_path:str, keep_decoder:bool=False, remo
 
 def pad_text_sequence(tokens:List[int],
                       max_seq_len:int,
-                      pad_idx:int,
-                      bos_idx:int,
-                      eos_idx:int) -> Tuple[List[int], List[int]]:
+                      pad_token_id:int,
+                      cls_token_id:int,
+                      sep_token_id:int) -> Tuple[List[int], List[int]]:
     """Pads a text sequence with padding tokens, and adds the beginning and end of sequence tokens if not already present.
 
     Args:
         tokens (List[int]): The tokens of the text sequence, each token is an integer and one element in the list.
         max_seq_len (int): The length to which the sequence should be padded.
-        pad_idx (int): The padding token index.
-        bos_idx (int): The beginning of sequence token index.
-        eos_idx (int): The end of sequence token index.
+        pad_token_id (int): The padding token index.
+        cls_token_id (int): The beginning of sequence token index.
+        sep_token_id (int): The end of sequence token index.
 
     Returns:
         Tuple[List[int], List[int]]: A tuple of the padded text sequence (tuple[0]) and the padding mask (tuple[1]).
     """    
     if len(tokens) > max_seq_len - 2:
         tokens = tokens[:max_seq_len - 2]
-    tokens = ([bos_idx] if tokens[0]!=bos_idx else []) + tokens + ([eos_idx] if tokens[-1]!=eos_idx else [])
+    tokens = ([cls_token_id] if tokens[0]!=cls_token_id else []) + tokens + ([sep_token_id] if tokens[-1]!=sep_token_id else [])
     num_tokens = len(tokens)
     padding_mask = [0] * num_tokens + [1] * (max_seq_len - num_tokens)
-    language_tokens = tokens + [pad_idx] * (max_seq_len - num_tokens)
+    language_tokens = tokens + [pad_token_id] * (max_seq_len - num_tokens)
 
     return language_tokens, padding_mask
 
