@@ -80,7 +80,7 @@ class MaskedLMDataset(TextMixin, BaseDataset):
         self.name = name
         self.text_file = text_file
         # Subtract 2 for CLS and SEP tokens -> each slice of the text data will be block_size-2 tokens long
-        # if then then add 2 tokens for CLS and SEP tokens, the total length will be block_size
+        # if we then add 2 tokens for CLS and SEP tokens, the total length will be block_size
         self.block_size = block_size - 2
         self.token_file = os.path.join(self.data_path, f'mlm_{self.name}_{self.split}.bin')
         self.index_file = os.path.join(self.data_path, f'mlm_{self.name}_{self.split}.idx')

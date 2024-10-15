@@ -1,13 +1,21 @@
+"""
+This module provides utility callbacks for PyTorch Lightning.
+"""
 import logging
 from pytorch_lightning import Callback, Trainer, LightningModule
 from pytorch_lightning.callbacks import ModelCheckpoint
 from typing import *
 from time import time
+import os
 
 logger = logging.getLogger(__name__)
 
 class WallClockCallback(Callback):
     def __init__(self):
+        """
+        This callback measures the wall clock time of the GPU during training, and logs the total GPU wall clock time
+        at the end of training. It also logs the average GPU wall clock time per batch.
+        """        
         self.gpu_wall_clock_time = 0.0
         self.start_time = None
         self.n_batches = 0
@@ -16,7 +24,7 @@ class WallClockCallback(Callback):
         self.start_time = time()
 
     def on_train_batch_end(self, trainer:Trainer, pl_module:LightningModule,
-                           outputs, batch: Any, batch_idx: int) -> None:
+                           outputs: Any, batch: Any, batch_idx: int) -> None:
         elapsed_time = time() - self.start_time
         self.gpu_wall_clock_time += elapsed_time
         self.n_batches += 1
@@ -46,7 +54,13 @@ class WallClockCallback(Callback):
     
 
 class GracefulStoppingCallback(Callback):
-    def __init__(self, ckpt_path:str):
+    def __init__(self, ckpt_path:os.PathLike):
+        """This callback saves the model checkpoint when a SIGTERM signal is received. This is useful for
+        gracefully stopping when using spot instances on cloud providers.
+
+        Args:
+            ckpt_path (os.PathLike): The path where the checkpoint should be saved.
+        """        
         self.ckpt_path = ckpt_path
 
     def on_train_batch_start(self, trainer:Trainer, pl_module:LightningModule, batch:Any, batch_idx:int) -> None:
@@ -55,29 +69,3 @@ class GracefulStoppingCallback(Callback):
             trainer.save_checkpoint(filepath=self.ckpt_path)
             trainer.should_stop = True
             logger.info("Checkpoint saved.")
-
-
-class ResumeCheckModelCheckpoint(ModelCheckpoint):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.has_resumed = False
-
-    def check_if_just_resumed(self):
-        if self.has_resumed:
-            logger.info("Resumed from checkpoint. Skipping repeated saving.")
-            self.has_resumed = False
-            return True
-        return False # else
-
-    def on_validation_end(self, trainer, pl_module):
-        if self.check_if_just_resumed():
-            return
-        super().on_validation_end(trainer, pl_module)
-
-    def on_train_epoch_end(self, trainer, pl_module):
-        if self.check_if_just_resumed():
-            return
-        super().on_train_epoch_end(trainer, pl_module)
-
-    def on_train_start(self, trainer, pl_module):
-        self.has_resumed = trainer.ckpt_path is not None

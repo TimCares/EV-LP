@@ -66,7 +66,7 @@ class BaseDataModule(LightningDataModule):
     def prepare_data(self) -> None:
         """
         Prepares the data, meaning the data is generated. This can include downloading the data, creating the index, etc.
-        What exactly happens is speficic to the underlying dataset.
+        What exactly happens is specific to the underlying dataset.
         """        
         if not hasattr(self, 'train_dataset'):
             self.set_train_dataset()
@@ -280,7 +280,7 @@ class ImageNetDataModule(BaseDataModule):
         *args:List[Any],
         **kwargs:Dict[str, Any],
     ):
-        """_summary_
+        """Data module for the ImageNet dataset.
 
         Args:
             data_path (os.PathLike): The path where the data is stored.

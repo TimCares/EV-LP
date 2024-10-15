@@ -1,46 +1,78 @@
+"""
+This module provides utility functions for data processing and transformation.
+"""
 from torchvision.transforms import v2 as transforms
 from timm.data import create_transform
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 import torch
 import logging
 import json
-from typing import Tuple, List, Dict, Union, Iterable
+from typing import Tuple, List, Dict, Union, Iterable, Any
 import PIL
 from timm.data.transforms import RandomResizedCropAndInterpolation
 import numpy as np
-import random
+import os
 
 logger = logging.getLogger(__name__)
 
-def write_data_into_jsonl(items, jsonl_file):
+def write_data_into_jsonl(items:List[Dict[str, Any]], jsonl_file:os.PathLike) -> None:
+    """Write a list of dictionaries into a jsonl file. Each dictionary
+    can be thought of as a single item in the dataset, and will be written as one json object in one line.
+
+    Args:
+        items (List[Dict[str, Any]]): The items/dictionaries to save.
+        jsonl_file (os.PathLike): Path to the jsonl file.
+    """    
     with open(jsonl_file, mode="w", encoding="utf-8") as writer:
         for data in items:
             writer.write(json.dumps(data, indent=None))
             writer.write('\n')
     logger.info("Write %s with %d items !" % (jsonl_file, len(items)))
 
-def get_transforms(
-        pretraining,
-        train,
-        size:int=224,
-        color_jitter=None,
-        aa="rand-m9-mstd0.5-inc1",
-        reprob=0.25,
-        remode="pixel",
-        recount=1,
-        beit_transforms:bool=False,
-        crop_scale:Tuple[float, float]=(0.08, 1.0)):
+def get_transform(
+    pretraining:bool,
+    train:bool,
+    size:int=224,
+    color_jitter:float=0.4,
+    aa="rand-m9-mstd0.5-inc1",
+    reprob:float=0.25,
+    remode:str="pixel",
+    recount:int=1,
+    crop_scale:Tuple[float, float]=(0.08, 1.0)
+) -> transforms.Compose:
+    """Creates a set of data transformations/augmentations for image pretraining or finetuning.
+
+    Args:
+        pretraining (bool): Whether the transformations should be used for pretraining (True) or finetuning (False).
+            If finetuning, then the augmentations will be stronger, and contain methods like rand augment.
+        train (bool): Whether the transformations should be used on the training set.
+            Setting this to False excludes any augmentations, and will only resize the image and normalize it.
+        size (int, optional): Which size the images should have. Defaults to 224.
+        color_jitter (float, optional): The amount of color jitter to apply to each channel. The same amount
+            is applied to all channels. Defaults to 0.4.
+        aa (str, optional): Auto Augment configuration as a string, see https://timm.fast.ai/AutoAugment for more.
+            Defaults to "rand-m9-mstd0.5-inc1".
+        reprob (float, optional): Random erasing probability, see https://timm.fast.ai/RandomErase for more.
+            Defaults to 0.25.
+        remode (str, optional): Random erasing mode, see https://timm.fast.ai/RandomErase for more.
+            Defaults to "pixel".
+        recount (int, optional): How many regions to erase, see https://timm.fast.ai/RandomErase for more.
+            Defaults to 1.
+        crop_scale (Tuple[float, float], optional): The range in which the image should be cropped randomly. Expressed
+            as a fraction: (<min_frac>, <max_frac>). Defaults to (0.08, 1.0), meaning between 8% and 100% of the image size.
+
+    Returns:
+        transforms.Compose: The set of transformations to be applied to an image.
+    """    
     
     if pretraining:
-        return get_transforms_pretraining(
+        return get_transform_pretraining(
             train=train,
             size=size,
-            beit_transforms=beit_transforms,
-            color_jitter=color_jitter,
             crop_scale=crop_scale
         )
     else:
-        return get_transforms_finetuning(
+        return get_transform_finetuning(
             train=train,
             size=size,
             color_jitter=color_jitter,
@@ -50,13 +82,28 @@ def get_transforms(
             recount=recount)
 
 
-def get_transforms_pretraining(
+def get_transform_pretraining(
     train:bool=True,
     size:int=224,
-    beit_transforms:bool=False,
-    color_jitter=None,
-    crop_scale:Tuple[float, float]=(0.08, 1.0)):
+    color_jitter:float=0.4,
+    crop_scale:Tuple[float, float]=(0.08, 1.0)
+) -> transforms.Compose:
+    """Creates a set of data transformations/augmentations for image pretraining.
 
+    Args:
+        train (bool, optional): Whether the transformations should be used on the training set.
+            Setting this to False excludes augmentations like cropping, color jitter etc. Defaults to True.
+        size (int, optional): Which size the images should have. Defaults to 224.
+        color_jitter (float, optional): The amount of color jitter to apply to each channel. The same amount
+            is applied to all channels. Defaults to 0.4.
+        crop_scale (Tuple[float, float], optional): The range in which the image should be cropped randomly. Expressed
+            as a fraction: (<min_frac>, <max_frac>). Defaults to (0.08, 1.0), meaning between 8% and 100% of the image size.
+
+    Returns:
+        transforms.Compose: The set of transformations to be applied to an image.
+    """    
+
+    # encouraged by torchvision docs for efficiency:
     transform_prepare = transforms.Compose(
             [
                 transforms.ToImage(),
@@ -64,34 +111,18 @@ def get_transforms_pretraining(
             ]
     )
 
-    if not train:
-        transform_train = transforms.Resize((size, size), interpolation=PIL.Image.BICUBIC)
-    elif beit_transforms:
-        beit_transform_list = []
-        # beit_transform_list.append(transforms.ColorJitter(0.4, 0.4, 0.4))
-        beit_transform_list.extend(
-            [
+    if train:
+        transform_train = transforms.Compose([
+                transforms.ColorJitter(color_jitter, color_jitter, color_jitter),
                 transforms.RandomHorizontalFlip(p=0.5),
                 RandomResizedCropAndInterpolation(
                     size=(size, size),
                     scale=crop_scale,
                     interpolation="bicubic",
                 ),
-            ]
-        )
-        transform_train = transforms.Compose(beit_transform_list)
+        ])
     else:
-        transform_train_list = [
-            transforms.RandomResizedCrop(
-                size=(size, size), scale=crop_scale, interpolation=3
-            ),  # 3 is bicubic
-            transforms.RandomHorizontalFlip(),
-        ]
-        if color_jitter is not None:
-            transform_train_list.append(
-                transforms.ColorJitter(color_jitter, color_jitter, color_jitter)
-            )
-        transform_train = transforms.Compose(transform_train_list)
+        transform_train = transforms.Resize((size, size), interpolation=PIL.Image.BICUBIC)
     
     final_transform = transforms.Compose(
         [
@@ -104,20 +135,38 @@ def get_transforms_pretraining(
 
     return transforms.Compose([transform_prepare, transform_train, final_transform])
 
-def get_transforms_finetuning(
-        train,
-        size:int=224,
-        color_jitter=None,
-        aa="rand-m9-mstd0.5-inc1",
-        reprob=0.25,
-        remode="pixel",
-        recount=1):
+def get_transform_finetuning(
+    train:bool,
+    size:int=224,
+    color_jitter:float=0.4,
+    aa:str="rand-m9-mstd0.5-inc1",
+    reprob:float=0.25,
+    remode:str="pixel",
+    recount:int=1
+) -> transforms.Compose:
+    """Creates a set of data transformations/augmentations for image finetuning.
+    Suitable for supervised learning in general.
 
-    mean = IMAGENET_DEFAULT_MEAN
-    std = IMAGENET_DEFAULT_STD
+    Args:
+        train (bool, optional): Whether the transformations should be used on the training set.
+            Setting this to False excludes augmentations like cropping, color jitter etc. Defaults to True.
+        size (int, optional): Which size the images should have. Defaults to 224.
+        color_jitter (float, optional): The amount of color jitter to apply to each channel. The same amount
+            is applied to all channels. Defaults to 0.4.
+        aa (str, optional): Auto Augment configuration as a string, see https://timm.fast.ai/AutoAugment for more.
+            Defaults to "rand-m9-mstd0.5-inc1".
+        reprob (float, optional): Random erasing probability, see https://timm.fast.ai/RandomErase for more.
+            Defaults to 0.25.
+        remode (str, optional): Random erasing mode, see https://timm.fast.ai/RandomErase for more.
+            Defaults to "pixel".
+        recount (int, optional): How many regions to erase, see https://timm.fast.ai/RandomErase for more.
+            Defaults to 1.
+
+    Returns:
+        transforms.Compose: The set of transformations to be applied to an image.
+    """
     # train transform
     if train:
-        # this should always dispatch to transforms_imagenet_train
         transform = create_transform(
             input_size=size,
             is_training=True,
@@ -127,8 +176,8 @@ def get_transforms_finetuning(
             re_prob=reprob,
             re_mode=remode,
             re_count=recount,
-            mean=mean,
-            std=std,
+            mean=IMAGENET_DEFAULT_MEAN,
+            std=IMAGENET_DEFAULT_STD,
         )
         return transform
 
@@ -141,7 +190,7 @@ def get_transforms_finetuning(
         ),
         transforms.CenterCrop(size),
         transforms.ToDtype(torch.float32, scale=True),
-        transforms.Normalize(mean, std)
+        transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)
     ]
     return transforms.Compose(t)
 

@@ -1,6 +1,7 @@
 from .base_datasets import (
     BaseDataset,
-    ImageDataset,
+    ImageMixin,
+    TextMixin,
     ImageTextDataset,
 )
 
