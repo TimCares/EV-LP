@@ -7,10 +7,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.vision_transformer import LayerScale
+from timm.models.vision_transformer import Block as TimmBlock
 from timm.layers import Mlp, DropPath
 from typing import Optional
 import torch.distributed as dist
 from typing import Tuple, Union
+
+class LayerNormLastBlock(TimmBlock):
+    """
+    Used for Data2Vec2Image model, where LayerNorm is applied after the attention block.
+    """
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        att_x = self.attn(x)
+        x = x + self.drop_path1(att_x)
+        r = x = self.norm1(x)
+        x = self.mlp(x)
+        x = self.norm2(r + self.drop_path2(x))
+        return x
 
 class Mlp_(Mlp):
     """

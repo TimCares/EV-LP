@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
 from registries import register_model, register_model_config
-from utils import freeze_module
-from utils import load_pretrained_d2v_model, prepare_output
+from utils import freeze_module, prepare_output
+from .data2vec2 import get_data2vec_image_model
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class ImageKDPreTrainingLightningModule(L.LightningModule):
 
         self.model = ImageKDModel(cfg=self.cfg.model)
 
-        self.teacher = load_pretrained_d2v_model(state_dict_path='/workspace/models/base_imagenet.pt')
+        self.teacher = get_data2vec_image_model(state_dict_path='/workspace/models/base_imagenet.pt')
         freeze_module(self.teacher)
 
         self.save_hyperparameters()
@@ -42,13 +42,9 @@ class ImageKDPreTrainingLightningModule(L.LightningModule):
         image = batch['image']
 
         with torch.no_grad():
-            target = self.teacher.extract_features(
-                source=image,
-                remove_extra_tokens=False,
-            )['layer_results']
+            target = self.teacher._intermediate_layers(image, n=12) # get output of all layers
         
-        output_dict = self({'image': image}) # call "forward"
-        pred = output_dict['layer_results']
+        pred = self({'image': image}) # call "forward"
         pred = prepare_output(pred, modality=Modality.IMAGE)
         target = prepare_output(target, modality=Modality.IMAGE)
         
@@ -135,14 +131,10 @@ class ImageKDModel(nn.Module):
         super(ImageKDModel, self).__init__()
         self.cfg = cfg
         
-        self.model = load_pretrained_d2v_model(state_dict_path='/workspace/models/base_imagenet.pt')
-        self.model.blocks = self.model.blocks[:self.cfg.depth]
+        self.model = get_data2vec_image_model(state_dict_path='/workspace/models/base_imagenet.pt', n_layers=self.cfg.depth)
 
     def forward(
         self,
         image:torch.Tensor,
     ):
-        return self.model.extract_features(
-            source=image,
-            remove_extra_tokens=False,
-        )
+        return self.model._intermediate_layers(image, n=self.cfg.depth) # get output of all layers

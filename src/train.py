@@ -9,8 +9,6 @@ from typing import List
 import logging
 from pytorch_lightning import seed_everything, Trainer, LightningDataModule
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelSummary, ModelCheckpoint
-import sys
-sys.path.append("beit2")
 from registries import MODEL_REGISTRY, MODEL_CONFIG_REGISTRY, DATAMODULE_REGISTRY, DATASET_REGISTRY
 from datamodules import MultiDataModule
 from datasets_ import TextMixin, ImageMixin

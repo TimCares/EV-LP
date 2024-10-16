@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from functools import partial
 from typing import Dict, Any
 import numpy as np
-from utils import load_pretrained_d2v_model
 import logging
 import pytorch_lightning as L
 import json
@@ -17,6 +16,7 @@ import timm
 from registries import register_model, register_model_config
 from modules import Block, ClipLoss
 from utils import freeze_module
+from .data2vec2 import get_data2vec_image_model
 
 logger = logging.getLogger(__name__)
 
@@ -205,8 +205,7 @@ class SHRe(nn.Module):
         self.text_model.encoder.layer = self.text_model.encoder.layer[:self.cfg.depth]
         self.text_model.pooler = None # remove pooler
 
-        self.image_model = load_pretrained_d2v_model(state_dict_path='/workspace/models/base_imagenet.pt')
-        self.image_model.blocks = self.image_model.blocks[:self.cfg.depth]
+        self.image_model = get_data2vec_image_model(state_dict_path='/workspace/models/base_imagenet.pt', n_layers=self.cfg.depth)
 
     def forward(
         self,
@@ -229,10 +228,7 @@ class SHRe(nn.Module):
         return out
     
     def encode_image(self, image):
-        x = self.image_model.extract_features(
-            source=image,
-            remove_extra_tokens=False,
-        )['x']
+        x = self.image_model.forward_features(image)
         
         return self.encode_shared(x)
 

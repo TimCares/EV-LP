@@ -1,24 +1,22 @@
 import torch
 from torch import nn
-import torch.nn.functional as F
 from functools import partial
 from typing import Dict, Any
 import numpy as np
-from omegaconf import OmegaConf
-import os
 import logging
 import pytorch_lightning as L
 import json
 from timm.models.vision_transformer import LayerScale
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from utils import Modality
 from transformers.optimization import get_cosine_schedule_with_warmup
 from utils import init_weights
 from transformers import BertModel
 from registries import register_model, register_model_config
 from modules import Block, ClipLoss, KDClipLoss, KDClipMomentumMemoryBankLoss
-from utils import freeze_module, load_beit2_teacher, load_pretrained_d2v_model
-from beit2.modeling_pretrain import VisionTransformerForMaskedImageModeling
+from utils import freeze_module
+from .beitv2 import VisionTransformerForMaskedImageModeling, get_beitv2_model
+from .data2vec2 import get_data2vec_image_model
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +28,8 @@ class S_SMKEPreTrainingLightningModule(L.LightningModule):
 
         self.model = S_SMKE(cfg=self.cfg.model)
 
-        beit2_kwargs = OmegaConf.to_container(self.cfg.teacher, resolve=True)
-        sd_path = beit2_kwargs.pop("model_path")
-        sd_name = beit2_kwargs.pop("model_name")
-        beit_path = os.path.join(sd_path, sd_name)
-
-        self.teacher:VisionTransformerForMaskedImageModeling = load_beit2_teacher(
-            sd_path=beit_path,
-            **beit2_kwargs,
+        self.teacher:VisionTransformerForMaskedImageModeling = get_beitv2_model(
+            state_dict_path=cfg.beit2_sd_path,
         )
         self.teacher.norm = nn.Identity()
         freeze_module(self.teacher)
@@ -81,15 +73,8 @@ class S_SMKEPreTrainingLightningModule(L.LightningModule):
 
         image_teacher = batch.pop('image_teacher')
 
-        # no mask
-        bool_masked_pos = torch.zeros((image_teacher.shape[0], self.teacher.patch_embed.num_patches), 
-                                      dtype=torch.bool).to(image_teacher.device)
-
         with torch.no_grad():
-            target = self.teacher.forward_features(
-                x=image_teacher,
-                bool_masked_pos=bool_masked_pos,
-            )[:, 0]
+            target = self.teacher.forward_features(image_teacher)[:, 0]
         
         output_dict = self(batch) # call "forward"
         input_text = output_dict['encoder_out_text']
@@ -229,20 +214,8 @@ class S_SMKEPreTrainingLightningModule(L.LightningModule):
         super().log(batch_size=self.cfg.data.dataloader.batch_size, sync_dist=True, *args, **kwargs)
 
 @dataclass
-class BEiTv2Config():
-    model_path:str = "/workspace/models"
-    model_name:str = "beitv2_base_patch16_224_pt1k.pth"
-    drop_path_rate: float = 0.05
-    use_shared_rel_pos_bias:bool = True
-    use_abs_pos_emb: bool = False
-    vocab_size: int = 8192
-    init_values: float =  0.1
-
-@dataclass
 @register_model_config(name='S-SMKE')
 class S_SMKEConfig():
-    beitv2: BEiTv2Config = field(default_factory=BEiTv2Config)
-
     embed_dim: int = 768
     depth: int = 6
     dropout: float = 0.0
@@ -279,8 +252,7 @@ class S_SMKE(nn.Module):
         self.text_model.encoder.layer = self.text_model.encoder.layer[:self.cfg.depth]
         self.text_model.pooler = None # remove pooler
         
-        self.image_model = load_pretrained_d2v_model(state_dict_path='/workspace/models/base_imagenet.pt')
-        self.image_model.blocks = self.image_model.blocks[:self.cfg.depth]
+        self.image_model = get_data2vec_image_model(state_dict_path='/workspace/models/base_imagenet.pt', n_layers=self.cfg.depth)
 
     def forward(
         self,
@@ -303,10 +275,7 @@ class S_SMKE(nn.Module):
         return out
     
     def encode_image(self, image):
-        x = self.image_model.extract_features(
-            source=image,
-            remove_extra_tokens=False,
-        )['x']
+        x = self.image_model.forward_features(image)
 
         img_tte = self.token_type_embeddings(
             torch.ones_like(x[:, :, 0], dtype=torch.long)
@@ -365,10 +334,7 @@ class S_SMKE(nn.Module):
         return out_dict
 
     def encode_image_only(self, image):
-        return self.image_model.extract_features(
-            source=image,
-            remove_extra_tokens=False,
-        )
+        return self.image_model.forward_features(image)
     
     def prepare_text_finetuning(self):
         self.text_model.pooler = BertModel.from_pretrained("bert-base-uncased").pooler # add pooler back

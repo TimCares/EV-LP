@@ -6,9 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 from pytorch_lightning import Callback, Trainer, LightningModule
 from pytorch_lightning.utilities import rank_zero_only
-import sys
 import os
-sys.path.append('..')
 from registries import DATAMODULE_REGISTRY
 from data.imagenet_zeroshot_data import (
     imagenet_classnames,
