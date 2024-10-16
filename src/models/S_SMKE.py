@@ -71,10 +71,8 @@ class S_SMKEPreTrainingLightningModule(L.LightningModule):
         if 'target' in batch:
             batch.pop('target') # unused, layer activations are the targets
 
-        image_teacher = batch.pop('image_teacher')
-
         with torch.no_grad():
-            target = self.teacher.forward_features(image_teacher)[:, 0]
+            target = self.teacher.forward_features(batch['image'])[:, 0]
         
         output_dict = self(batch) # call "forward"
         input_text = output_dict['encoder_out_text']
