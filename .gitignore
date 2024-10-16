@@ -162,3 +162,5 @@ cython_debug/
 #.idea/
 
 .hydra
+data/*
+!data/imagenet_zeroshot_data.py

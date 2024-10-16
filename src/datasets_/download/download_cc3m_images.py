@@ -6,6 +6,8 @@ import concurrent.futures
 from tqdm import tqdm
 import urllib
 from datasets.utils.file_utils import get_datasets_user_agent
+import argparse
+import shutil
 
 USER_AGENT = get_datasets_user_agent()
 
@@ -30,15 +32,21 @@ def fetch_single_image(image_url, img_path, idx):
 
 
 def main():
-    path_to_data = os.path.join('/workspace', "conceptual_captions")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_path', type=str)
+    parser.add_argument('--path_to_index', type=str)
+    args = parser.parse_args()
+
+    if not os.path.exists(args.path_to_index):
+        raise FileNotFoundError(f"Conceptual Captions 3M index file {args.path_to_index} not found, download it first: "
+                                "https://ai.google.com/research/ConceptualCaptions/download")
+
+    path_to_data = os.path.join(args.data_path, "conceptual_captions_3m")
     img_path = os.path.join(path_to_data, "images")
-    os.makedirs(path_to_data, exist_ok=True)
     os.makedirs(img_path, exist_ok=True)
 
-    index_path = os.path.join('/workspace', "Train-GCC-training.tsv")
-    if not os.path.exists(index_path):
-        raise FileNotFoundError(f"Conceptual Captions index file {index_path} not found, download it first: "
-                                "https://ai.google.com/research/ConceptualCaptions/download")   
+    index_path = os.path.join(path_to_data, "Train-GCC-training.tsv")
+    shutil.copy(args.path_to_index, index_path)
     index = pd.read_csv(index_path, sep='\t', header=None).reset_index(drop=True)
     index.columns = ['caption', 'image_url']
     already_existing = os.listdir(img_path)

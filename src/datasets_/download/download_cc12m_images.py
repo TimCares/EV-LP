@@ -7,6 +7,7 @@ from tqdm import tqdm
 import urllib
 from datasets.utils.file_utils import get_datasets_user_agent
 from torchvision.datasets.utils import download_url
+import argparse
 
 USER_AGENT = get_datasets_user_agent()
 
@@ -31,9 +32,12 @@ def fetch_single_image(image_url, img_path, idx):
 
 
 def main():
-    path_to_data = os.path.join('/workspace', "conceptual_captions_12m")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_path', type=str)
+    args = parser.parse_args()
+
+    path_to_data = os.path.join(args.data_path, "conceptual_captions_12m")
     img_path = os.path.join(path_to_data, "images")
-    os.makedirs(path_to_data, exist_ok=True)
     os.makedirs(img_path, exist_ok=True)
 
     download_url(url='https://storage.googleapis.com/conceptual_12m/cc12m.tsv', root=path_to_data)
