@@ -157,6 +157,18 @@ cd src
 python sweep_retrieval.sh
 ```
 
+To generate the image-text retrieval scores published in research papers like BEiT-3 run the following (COCO):
+
+```shell
+python src/run_image_text_retrieval.py \
+    --config-path configs \
+    --config-name coco_flickr_retrieval.yaml \
+    model_path=<path_to_store_all_data>/models/retrieval_finetune_coco/model-{step}-{loss}-val.ckpt \
+    model_name=S-SMKE
+```
+
+And for Flickr30K replace `model_path` with `model_path=<path_to_store_all_data>/models/retrieval_finetune_flickr30k/model-{step}-{loss}-val.ckpt`.
+
 #### Flickr30K
 | Model | Resolution | IR@1 | TR@1 | #params | weights |
 |:----------------------------------------|:----------:|:-----:|:-----:|:-------:|-------------------|

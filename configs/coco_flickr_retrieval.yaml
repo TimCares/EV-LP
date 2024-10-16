@@ -1,7 +1,4 @@
-
-pretrained_path: /workspace/models/
-
-model_version:
+model_path:
 model_name:
 
 data:

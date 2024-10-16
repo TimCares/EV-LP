@@ -237,9 +237,8 @@ def main(cfg: DictConfig) -> None:
         dm = DATAMODULE_REGISTRY[datamodule_key](**dataset_args)
         datamodules.append((datamodule_key, dm))
     
-    path = os.path.join(cfg.pretrained_path, cfg.model_version)
     model_cls:LightningModule = MODEL_REGISTRY[cfg.model_name]
-    model = model_cls.load_from_checkpoint(path).model
+    model = model_cls.load_from_checkpoint(cfg.model_path).model
     model = model.to(device)
     # set model to inference mode
     model.requires_grad_(False)
