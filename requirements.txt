@@ -3,6 +3,8 @@ datasets
 deepspeed
 einops
 huggingface_hub[cli]
+huggingface_hub[hf_transfer]
+hf_transfer
 hydra-core
 hydra_colorlog
 lightning
