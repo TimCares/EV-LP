@@ -1,6 +1,5 @@
 """
 This module defines a memory efficient dataset for training models on raw unstructured text data.
-The code is adapted from Meta's fairseq library: https://github.com/facebookresearch/fairseq/blob/main/fairseq/tasks/masked_lm.py
 """
 import os
 import mmap
@@ -11,14 +10,10 @@ import torch
 from transformers import AutoTokenizer
 from typing import Union, Tuple, Dict, Any, List
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-from .base_datasets import BaseDataset, TextMixin
+from .base_datasets import BaseDataset
+from .mixins import TextMixin
 from utils import Modality
-import subprocess
-import tempfile
-try:
-    import pyarrow.plasma as plasma
-except ImportError:
-    plasma = None
+from multiprocessing import shared_memory
 from registries import register_dataset
 
 def init_worker(tokenizer_path:os.PathLike) -> None:
@@ -69,7 +64,10 @@ class MaskedLMDataset(TextMixin, BaseDataset):
             block_size (int, optional): How many tokens should be in one block. One block is equal to one training example, i.e.
                 a single text sequence. This is the maximum sequence length. The text file will be sliced into chunks
                 of <block_size> tokens. Defaults to 512.
-        """        
+        """
+        # set before calling super().__init__ as the constructor of
+        # BaseDataset uses property "data_dir", and therefore "name" must be set before calling super().__init__
+        self.name = name
         super().__init__(
             data_path=data_path,
             split=split,
@@ -77,13 +75,12 @@ class MaskedLMDataset(TextMixin, BaseDataset):
             max_seq_len=block_size,
             mlm_probability=mask_prob,
         )
-        self.name = name
         self.text_file = text_file
         # Subtract 2 for CLS and SEP tokens -> each slice of the text data will be block_size-2 tokens long
         # if we then add 2 tokens for CLS and SEP tokens, the total length will be block_size
         self.block_size = block_size - 2
-        self.token_file = os.path.join(self.data_path, f'mlm_{self.name}_{self.split}.bin')
-        self.index_file = os.path.join(self.data_path, f'mlm_{self.name}_{self.split}.idx')
+        self.token_file = os.path.join(self.path_to_split, f'mlm_{self.name}_{self.split}.bin')
+        self.index_file = os.path.join(self.path_to_split, f'mlm_{self.name}_{self.split}.idx')
         self.index_entry_size = 16  # Each index entry has two int64 (offset and length)
 
         if not self.index_exists():
@@ -94,7 +91,7 @@ class MaskedLMDataset(TextMixin, BaseDataset):
         """
         Name of the directory in self.data_path where the data is stored.
         """        
-        raise self.name
+        return self.name
 
     def __getstate__(self):
         """
@@ -232,9 +229,8 @@ class MaskedLMDataset(TextMixin, BaseDataset):
         if current_length > 0:
             items.append([current_offset, current_length])
 
-        self._items = PlasmaArray(
-            np.array(items, dtype=np.int64)
-        ) # wrap the items in a PlasmaArray to store them in shared memory -> more efficient memory usage in multiprocessing environments
+        # wrap in shared memory for multiprocessing
+        self._items = SharedMemoryArray(np.array(items, dtype=np.int64))
 
         # Close the index mmap and file since it's no longer needed
         self.index_mmap.close()
@@ -244,6 +240,9 @@ class MaskedLMDataset(TextMixin, BaseDataset):
 
     @property
     def items(self):
+        """
+        Wrapper for easy access.
+        """
         return self._items.array
 
     def get_num_lines(self) -> int:
@@ -284,18 +283,8 @@ class MaskedLMDataset(TextMixin, BaseDataset):
         # sequence length is in number of tokens, each token is 4 bytes (length * 4 = length in bytes)
         tokens = np.frombuffer(self.mmap_file[offset:offset + length * 4], dtype=np.int32).tolist()
 
-        if self.mlm_probability > 0.0:
-            mask_labels = self.mask_sequence(input_tokens=tokens, whole_word_mask=True)
-            mask_labels = [0] + mask_labels + [0] * (self.max_seq_len - length - 1)
-            result_dict["mask_labels"] = mask_labels
-
-        tokens = [self.tokenizer.cls_token_id] + tokens + [self.tokenizer.sep_token_id]
-        num_tokens = length + 2 # Added CLS and SEP tokens
-        padding_mask = [0] * num_tokens + [1] * (self.max_seq_len - num_tokens)
-        language_tokens = tokens + [self.tokenizer.pad_token_id] * (self.max_seq_len - num_tokens)
-
-        result_dict["text"] = language_tokens
-        result_dict["padding_mask"] = padding_mask
+        text_dict = self.get_text(tokens)
+        result_dict.update(text_dict)
         result_dict["id"] = idx
 
         return result_dict
@@ -310,94 +299,61 @@ class MaskedLMDataset(TextMixin, BaseDataset):
 
         Returns:
             Tuple[str]: Tuple of strings, where each string is the name of an index file containing the data.
-        """        
-        return (self.token_file, self.index_file)
+        """
+        token_file_ = os.path.join(self.split, f'mlm_{self.name}_{self.split}.bin')
+        index_file_ = os.path.join(self.split, f'mlm_{self.name}_{self.split}.idx')
+        # output used in "index_exists()" of supertype BaseDataset
+        # does "os.path.join(self.path_to_data, index_file)" for each index file
+        # since we have the index file in the split directory, we need to include the split directory in the index file paths
+        return (token_file_, index_file_)
     
     def collater(self, samples:List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
         batch_tensors = super().collater(samples)
-        if self.mlm_probability > 0.0:
-            batch_tensors['targets'] = batch_tensors['text'].clone()
-            batch_tensors['targets'][~batch_tensors['mask_labels'].bool()] = -100
-            batch_tensors['text'][batch_tensors['mask_labels'].bool()] = self.tokenizer.mask_token_id
+        batch_tensors = self.apply_mask(batch_tensors)
         return batch_tensors
 
-
-# copied from fairseq/data/plasma_utils.py:
-
-# Copyright (c) Facebook, Inc. and its affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-class PlasmaArray:
+class SharedMemoryArray:
     """
-    Wrapper around numpy arrays that automatically moves the data to shared
-    memory upon serialization. This is particularly helpful when passing numpy
-    arrays through multiprocessing, so that data is not unnecessarily
-    duplicated or pickled.
+    Wrapper around NumPy arrays using multiprocessing.shared_memory for shared memory.
+    See: https://docs.python.org/3/library/multiprocessing.shared_memory.html
     """
 
-    def __init__(self, array):
-        super().__init__()
-        self.array = array
-        self.disable = array.nbytes < 134217728  # disable for arrays <128MB
-        self.object_id = None
-        self.path = None
+    def __init__(self, array:np.ndarray):
+        self.shape = array.shape
+        self.dtype = array.dtype
+        self.shm = shared_memory.SharedMemory(create=True, size=array.nbytes)
+        self.array = np.ndarray(self.shape, dtype=self.dtype, buffer=self.shm.buf)
+        self.array[:] = array[:]
 
-        # variables with underscores shouldn't be pickled
-        self._client = None
-        self._server = None
-        self._server_tmp = None
-        self._plasma = None
+    def __getstate__(self) -> Tuple[Tuple[int, ...], np.dtype, str]:
+        """Prepare the object's state for pickling. Useful for multiprocessing when
+        we do not want to copy the entire object to each worker process.
 
-    @property
-    def plasma(self):
-        if self._plasma is None and not self.disable:
-            self._plasma = plasma
-        return self._plasma
+        Returns:
+            Tuple[Tuple[int, ...], np.dtype, str]: A tuple containing the shape of the array (tuple[0]),
+                the dtype (tuple[1]) of the array, and the name of the shared memory block (tuple[2]).
+        """
+        return (self.shape, self.dtype, self.shm.name)
 
-    def start_server(self):
-        if self.plasma is None or self._server is not None:
-            return
-        assert self.object_id is None
-        assert self.path is None
-        self._server_tmp = tempfile.NamedTemporaryFile()
-        self.path = self._server_tmp.name
-        self._server = subprocess.Popen(
-            ["plasma_store", "-m", str(int(1.05 * self.array.nbytes)), "-s", self.path]
-        )
+    def __setstate__(self, state:Tuple[Tuple[int, ...], np.dtype, str]) -> None:
+        """Restore the object's state from the unpickled state. This is executed in every worker process
+        when using multiprocessing.
 
-    @property
-    def client(self):
-        if self._client is None:
-            assert self.path is not None
-            self._client = self.plasma.connect(self.path, num_retries=200)
-        return self._client
+        Args:
+            state (Tuple[Tuple[int, ...], np.dtype, str]): The state of the object to be restored.
+                A tuple containing the shape of the array (tuple[0]), the dtype (tuple[1]) of the array,
+                and the name of the shared memory block (tuple[2]).
+        """
+        self.shape, self.dtype, shm_name = state
+        # get shared memory by name
+        self.shm = shared_memory.SharedMemory(name=shm_name)
+        # create array from shared memory, this is the reconstructed array
+        self.array = np.ndarray(self.shape, dtype=self.dtype, buffer=self.shm.buf)
 
-    def __getstate__(self):
-        """Called on pickle load"""
-        if self.plasma is None:
-            return self.__dict__
-        if self.object_id is None:
-            self.start_server()
-            self.object_id = self.client.put(self.array)
-        state = self.__dict__.copy()
-        del state["array"]
-        state["_client"] = None
-        state["_server"] = None
-        state["_server_tmp"] = None
-        state["_plasma"] = None
-        return state
-
-    def __setstate__(self, state):
-        """Called on pickle save"""
-        self.__dict__.update(state)
-        if self.plasma is None:
-            return
-        self.array = self.client.get(self.object_id)
-
-    def __del__(self):
-        if self._server is not None:
-            self._server.kill()
-            self._server = None
-            self._server_tmp.close()
-            self._server_tmp = None
+    def __del__(self) -> None:
+        """Clean up shared memory resources."""
+        try:
+            self.shm.close()
+            self.shm.unlink()
+        except FileNotFoundError:
+            pass  # The shared memory block might have been already unlinked.

@@ -7,7 +7,8 @@ import logging
 from typing import *
 from .data_utils import write_data_into_jsonl
 from torchvision.datasets import CIFAR10, CIFAR100
-from .base_datasets import ImageMixin, BaseDataset
+from .base_datasets import BaseDataset
+from .mixins import ImageMixin
 from utils import Modality
 from .imagenet_classes import IMAGENET2012_CLASSES
 from registries import register_dataset

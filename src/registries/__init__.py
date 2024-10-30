@@ -9,6 +9,6 @@ from .registry import (
     register_datamodule,
 )
 
-from models import * # to register models if not imported through entrypoint or scripts used by the entrypoint
-from datasets import * # see above
-from datamodules import * # see above
+# from models import * # to register models if not imported through entrypoint or scripts used by the entrypoint
+# from datasets import * # see above
+# from datamodules import * # see above

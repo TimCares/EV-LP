@@ -82,5 +82,5 @@ def get_data2vec_image_model(state_dict_path:os.PathLike, n_layers:int=12) -> Vi
     state_dict = torch.load(state_dict_path)['model']
     state_dict = preprocess_data2vec2_image_state_dict(state_dict, n_layers=n_layers)
     result = vit.load_state_dict(state_dict)
-    logger.info(f"Loaded BEiTv2 state dict with result: {result}")
+    logger.info(f"Loaded Data2VecImage state dict with result: {result}")
     return vit

@@ -84,7 +84,7 @@ class COCOCaptions(ImageTextDataset):
         """
         Name of the directory in self.data_path where the data is stored.
         """        
-        raise "coco"
+        return "coco"
     
     def create_index(self):
         if self.split == "train":
@@ -189,7 +189,7 @@ class Flickr30K(ImageTextDataset):
         """
         Name of the directory in self.data_path where the data is stored.
         """        
-        raise "flickr30k"
+        return "flickr30k"
 
     def create_index(self):
 
@@ -271,7 +271,7 @@ class ConceptualCaptions(ImageTextDataset):
         """
         Name of the directory in self.data_path where the data is stored.
         """        
-        raise f"conceptual_captions_{self.type[2:]}"
+        return f"conceptual_captions_{self.type[2:]}"
 
     def make_conceptual_captions_dataset_index(self):
         img_path = os.path.join(self.path_to_data, "images")

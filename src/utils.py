@@ -1,6 +1,6 @@
 import torch
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_ as __call_trunc_normal_
@@ -115,3 +115,20 @@ def init_weights(m:nn.Module) -> None:
     elif isinstance(m, nn.LayerNorm):
         nn.init.constant_(m.bias, 0)
         nn.init.constant_(m.weight, 1.0)
+
+def check_int_str_list_type(l: List[Any]) -> Any:
+    """Check if all elements in a list are either of type int or str.
+
+    Args:
+        l (List[Any]): The list to check.
+
+    Returns:
+        Any: The type of the elements in the list, either int, str. If the list contains elements of both types,
+            or all elements or of another type (e.g. float), returns Any.
+    """        
+    if all(isinstance(item, int) for item in l):
+        return int
+    elif all(isinstance(item, str) for item in l):
+        return str
+    else:
+        return Any
